@@ -804,22 +804,32 @@ const Embarques = () => {
           <TabsContent value="internacionais" className="space-y-6 mt-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Fretes Internacionais</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Cotações de frete para importação (China/Exterior → Brasil)
-                </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-base">Fretes Internacionais</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Cotações de frete para importação (China/Exterior → Brasil)
+                    </p>
+                  </div>
+                  {intlRows.length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="flex items-center gap-1 text-emerald-500 font-semibold">
+                        <CheckCircle2 className="h-4 w-4" /> {intlRows.length} registros carregados
+                      </span>
+                      <Button size="sm" variant="ghost" onClick={clearIntl} className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4 mr-1" /> Limpar
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <div>
-                  <h4 className="text-sm font-semibold mb-2">
-                    Carregar Planilha de Cotações
-                  </h4>
-                  <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
+                  <h4 className="text-sm font-semibold mb-2">Carregar Planilha de Cotações</h4>
+                  <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-4 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      {intlRows.length > 0
-                        ? "Atualizar planilha (substituirá os dados atuais)"
-                        : "Carregar Planilha de Fretes"}
+                      {intlRows.length > 0 ? "Atualizar Planilha de Fretes" : "Carregar Planilha de Fretes"}
                     </span>
                     <input
                       type="file"
@@ -833,77 +843,239 @@ const Embarques = () => {
                     />
                   </label>
                   <p className="text-xs text-muted-foreground mt-2">
-                    A primeira linha da planilha deve conter os nomes das
-                    colunas. Os dados ficam salvos no navegador e só são
-                    atualizados ao carregar uma nova planilha.
+                    Os dados estão salvos no navegador. Faça upload de um novo arquivo para atualizar.
                   </p>
                 </div>
 
-                {intlRows.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
-                      <div className="flex items-center gap-2 text-sm">
-                        <FileSpreadsheet className="h-4 w-4 text-primary" />
-                        <span className="font-semibold">{intlFileName}</span>
-                        <span className="text-muted-foreground">
-                          · {intlRows.length} registros
-                        </span>
-                        {intlUploadedAt && (
-                          <span className="text-xs text-muted-foreground">
-                            · {new Date(intlUploadedAt).toLocaleString("pt-BR")}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={clearIntl}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" /> Limpar
-                      </Button>
-                    </div>
-                    <div className="overflow-auto rounded-lg border max-h-[500px]">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50 sticky top-0">
-                          <tr>
-                            {intlColumns.map((c) => (
-                              <th
-                                key={c}
-                                className="text-left px-3 py-2 font-semibold whitespace-nowrap"
-                              >
-                                {c}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {intlRows.map((row, i) => (
-                            <tr key={i} className="border-t hover:bg-muted/30">
-                              {intlColumns.map((c) => (
-                                <td
-                                  key={c}
-                                  className="px-3 py-2 whitespace-nowrap"
-                                >
-                                  {String(row[c] ?? "")}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
+                {intlRows.length === 0 ? (
                   <div className="rounded-lg border bg-muted/30 p-4">
-                    <h4 className="text-sm font-semibold mb-1">
-                      Nenhuma planilha carregada
-                    </h4>
+                    <h4 className="text-sm font-semibold mb-1">Nenhuma planilha carregada</h4>
                     <p className="text-sm text-muted-foreground">
-                      Os fretes serão exibidos aqui após o carregamento da
-                      planilha. Os dados ficarão salvos automaticamente.
+                      Os fretes serão exibidos aqui após o carregamento da planilha. Os dados ficarão salvos automaticamente.
                     </p>
                   </div>
+                ) : (
+                  <>
+                    {/* KPI cards superiores */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
+                        <p className="text-xs text-blue-500 font-semibold">Containers 20ft</p>
+                        <p className="text-2xl font-bold">{intlStats.containers["20ft"]}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
+                        <p className="text-xs text-blue-500 font-semibold">Containers 40ft</p>
+                        <p className="text-2xl font-bold">{intlStats.containers["40ft"]}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
+                        <p className="text-xs text-blue-500 font-semibold">Containers 45ft</p>
+                        <p className="text-2xl font-bold">{intlStats.containers["45ft"]}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-emerald-500/40 p-3 text-center">
+                        <p className="text-xs text-emerald-500 font-semibold">Peso Total (aprox.)</p>
+                        <p className="text-2xl font-bold">{formatPesoApprox(intlStats.pesoTotal)}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-fuchsia-500/40 p-3 text-center">
+                        <p className="text-xs text-fuchsia-500 font-semibold">Agentes</p>
+                        <p className="text-2xl font-bold">{intlStats.agentes.length}</p>
+                      </div>
+                    </div>
+
+                    {/* Modalidades */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="rounded-lg border-2 border-emerald-500/40 p-3">
+                        <p className="text-xs text-emerald-500 font-semibold">Modalidade LCL</p>
+                        <p className="text-2xl font-bold">{intlStats.modalidades.LCL}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3">
+                        <p className="text-xs text-blue-500 font-semibold">Modalidade FCL</p>
+                        <p className="text-2xl font-bold">{intlStats.modalidades.FCL}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-orange-500/40 p-3">
+                        <p className="text-xs text-orange-500 font-semibold">Modalidade Aéreo</p>
+                        <p className="text-2xl font-bold">{intlStats.modalidades.Aereo}</p>
+                      </div>
+                    </div>
+
+                    {/* Valor total */}
+                    <div className="rounded-lg border-2 border-emerald-500/40 p-4">
+                      <p className="text-sm text-emerald-500 font-semibold">Valor Total de Fretes</p>
+                      <p className="text-2xl font-bold text-emerald-500">{formatBRLIntl(intlStats.valorTotal)}</p>
+                    </div>
+
+                    {/* Filtros */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Filtros</CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Tipo de Container</label>
+                          <Select value={intlFilterTipo} onValueChange={setIntlFilterTipo}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos</SelectItem>
+                              <SelectItem value="20">20ft</SelectItem>
+                              <SelectItem value="40">40ft</SelectItem>
+                              <SelectItem value="45">45ft</SelectItem>
+                              <SelectItem value="LCL">LCL</SelectItem>
+                              <SelectItem value="Aéreo">Aéreo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">PO (Pesquisar)</label>
+                          <Input
+                            placeholder="Digite a PO..."
+                            value={intlFilterPO}
+                            onChange={(e) => setIntlFilterPO(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Exportador</label>
+                          <Select value={intlFilterExp} onValueChange={setIntlFilterExp}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos</SelectItem>
+                              {intlStats.exportadores.map((e) => (
+                                <SelectItem key={e} value={e}>{e}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Agente</label>
+                          <Select value={intlFilterAgente} onValueChange={setIntlFilterAgente}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos</SelectItem>
+                              {intlStats.agentes.map((a) => (
+                                <SelectItem key={a} value={a}>{a}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Mês</label>
+                          <Select defaultValue="Todos">
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos os meses</SelectItem>
+                              {intlStats.meses.map((m) => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Quantidade Média */}
+                    <Card className="border-blue-500/40 border-2">
+                      <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Quantidade Média de Containers por Mês</p>
+                          <p className="text-3xl font-bold text-blue-500">{intlStats.mediaContainers.toFixed(1)}</p>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-0.5">
+                          <p>Total de meses: {intlStats.meses.length}</p>
+                          <p>Total de containers: {intlStats.totalContainers}</p>
+                          <p>Média de kg/mês: {(intlStats.mediaKgMes / 1000).toFixed(1)}k kg</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Detalhes por Mês */}
+                    {intlStats.detalhesPorMes.length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm">Detalhes por Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {intlStats.detalhesPorMes.map((d) => (
+                            <div key={d.mes} className="rounded-lg border-2 border-blue-500/40 p-3">
+                              <p className="text-xs font-semibold">{monthLabelKey(d.mes)}</p>
+                              <p className="text-lg font-bold">{d.containers} containers</p>
+                              <p className="text-xs text-muted-foreground">{(d.peso / 1000).toFixed(1)}k kg</p>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Listagem de rotas */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">{intlRowsFiltradas.length} de {intlRows.length} rotas</p>
+                    </div>
+                    <div className="space-y-2">
+                      {intlRowsFiltradas.slice(0, 50).map((row, i) => {
+                        const po = intlField.po ? String(row[intlField.po] ?? "") : "";
+                        const exp = intlField.exportador ? String(row[intlField.exportador] ?? "") : "";
+                        const cont = intlField.container ? String(row[intlField.container] ?? "") : "";
+                        const qtd = intlField.qtdContainer ? String(row[intlField.qtdContainer] ?? "") : "";
+                        const valor = intlField.valor ? detectQty(row[intlField.valor]) : 0;
+                        const praco = intlField.praco ? String(row[intlField.praco] ?? "") : "";
+                        return (
+                          <div key={i} className="rounded-lg border p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-semibold text-blue-500">{po || `Linha ${i + 1}`}</p>
+                              <p className="text-base font-bold text-emerald-500">$ {valor.toFixed(0)}</p>
+                            </div>
+                            {exp && <p className="text-sm">⚓ {exp}</p>}
+                            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                              {praco && (
+                                <div>
+                                  <p className="text-muted-foreground">Praço</p>
+                                  <p className="font-semibold">{praco}</p>
+                                </div>
+                              )}
+                              {cont && (
+                                <div>
+                                  <p className="text-muted-foreground">Container</p>
+                                  <p className="font-semibold">{cont}</p>
+                                </div>
+                              )}
+                              {qtd && (
+                                <div>
+                                  <p className="text-muted-foreground">Qtd Container</p>
+                                  <p className="font-semibold">{qtd}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {intlRowsFiltradas.length > 50 && (
+                        <p className="text-xs text-muted-foreground text-center">Mostrando 50 de {intlRowsFiltradas.length} resultados</p>
+                      )}
+                    </div>
+
+                    {/* Tabela bruta */}
+                    <details className="rounded-lg border">
+                      <summary className="cursor-pointer px-4 py-2 text-sm font-semibold flex items-center gap-2">
+                        <FileSpreadsheet className="h-4 w-4" /> Ver tabela completa ({intlFileName})
+                      </summary>
+                      <div className="overflow-auto max-h-[500px]">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50 sticky top-0">
+                            <tr>
+                              {intlColumns.map((c) => (
+                                <th key={c} className="text-left px-3 py-2 font-semibold whitespace-nowrap">{c}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {intlRows.map((row, i) => (
+                              <tr key={i} className="border-t hover:bg-muted/30">
+                                {intlColumns.map((c) => (
+                                  <td key={c} className="px-3 py-2 whitespace-nowrap">{String(row[c] ?? "")}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </>
                 )}
               </CardContent>
             </Card>
