@@ -45,9 +45,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 const SHIPMENT_COLORS = ["hsl(217 91% 60%)", "hsl(38 92% 50%)", "hsl(var(--muted-foreground))"];
 
 const STATUS_GROUPS = {
-  noPrazo: ["no prazo", "entregue em dia", "chegou", "ok"],
-  atrasado: ["atrasado", "entregue atrasado", "crítico", "critico", "verificar aéreo", "verificar aereo"],
-  emAndamento: ["em produção", "em producao", "em viagem", "aguardando embarque", "em desembaraço", "em desembaraco", "estoque", "em andamento"],
+  noPrazo: ["no prazo", "on time", "entregue em dia", "chegou", "ok", "dia"],
+  atrasado: ["atrasado", "entregue atrasado", "crítico", "critico", "verificar aéreo", "verificar aereo", "late"],
+  emAndamento: ["em produção", "em producao", "em viagem", "aguardando embarque", "em desembaraço", "em desembaraco", "estoque", "em andamento", "in transit"],
 };
 
 function classifyStatus(status: string | null): "noPrazo" | "atrasado" | "emAndamento" | "outro" {
