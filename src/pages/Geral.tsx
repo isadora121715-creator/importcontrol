@@ -26,6 +26,7 @@ type PedidoSummary = {
   status_fornecedor: string | null;
   status_compra_venda: string | null;
   fornecedor: string | null;
+  cliente: string | null;
   preco_venda: number | null;
   preco_compra: number | null;
   qty_venda: number | null;
