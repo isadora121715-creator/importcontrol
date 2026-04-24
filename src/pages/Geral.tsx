@@ -161,7 +161,7 @@ const Geral = () => {
       if (monthKey) {
         if (!monthly.has(monthKey)) monthly.set(monthKey, { compras: 0, vendas: 0 });
         const m = monthly.get(monthKey)!;
-        m.compras += pCompra * qCompra;
+        m.compras += pCompra * qCompraEff;
         m.vendas += pVenda * qVenda;
       }
 
