@@ -35,8 +35,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const STORAGE_FCL_KEY = "embarques.fretes_fcl.v1";
-const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v1";
+const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
+const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v2";
 
 // ---------------------------------------------------------------------------
 // CONTAINERS
