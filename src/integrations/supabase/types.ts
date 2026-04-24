@@ -14,7 +14,195 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      action_plans: {
+        Row: {
+          action_text: string
+          categoria: string
+          created_at: string
+          id: string
+          pi: number | null
+          po: string | null
+        }
+        Insert: {
+          action_text: string
+          categoria?: string
+          created_at?: string
+          id?: string
+          pi?: number | null
+          po?: string | null
+        }
+        Update: {
+          action_text?: string
+          categoria?: string
+          created_at?: string
+          id?: string
+          pi?: number | null
+          po?: string | null
+        }
+        Relationships: []
+      }
+      pedidos: {
+        Row: {
+          categoria: string
+          chegada_hci: string | null
+          cliente: string | null
+          codigo: string | null
+          codigo_compra: string | null
+          created_at: string
+          data_compra: string | null
+          data_recebimento_compra: string | null
+          descricao: string | null
+          dias_atraso: number | null
+          dias_faltam: number | null
+          embarque: string | null
+          emissao_pedido_sistema: string | null
+          entrega_fornecedor: string | null
+          eta: string | null
+          etd: string | null
+          follow_up: string | null
+          fornecedor: string | null
+          id: string
+          item: string | null
+          pi: number | null
+          po: string | null
+          prazo_cliente: string | null
+          prazo_inicial_fornecedor: string | null
+          preco_compra: number | null
+          preco_venda: number | null
+          qty_compra: number | null
+          qty_venda: number | null
+          status_compra_venda: string | null
+          status_fornecedor: string | null
+          status_producao: string | null
+          venda_em_dias: number | null
+        }
+        Insert: {
+          categoria?: string
+          chegada_hci?: string | null
+          cliente?: string | null
+          codigo?: string | null
+          codigo_compra?: string | null
+          created_at?: string
+          data_compra?: string | null
+          data_recebimento_compra?: string | null
+          descricao?: string | null
+          dias_atraso?: number | null
+          dias_faltam?: number | null
+          embarque?: string | null
+          emissao_pedido_sistema?: string | null
+          entrega_fornecedor?: string | null
+          eta?: string | null
+          etd?: string | null
+          follow_up?: string | null
+          fornecedor?: string | null
+          id?: string
+          item?: string | null
+          pi?: number | null
+          po?: string | null
+          prazo_cliente?: string | null
+          prazo_inicial_fornecedor?: string | null
+          preco_compra?: number | null
+          preco_venda?: number | null
+          qty_compra?: number | null
+          qty_venda?: number | null
+          status_compra_venda?: string | null
+          status_fornecedor?: string | null
+          status_producao?: string | null
+          venda_em_dias?: number | null
+        }
+        Update: {
+          categoria?: string
+          chegada_hci?: string | null
+          cliente?: string | null
+          codigo?: string | null
+          codigo_compra?: string | null
+          created_at?: string
+          data_compra?: string | null
+          data_recebimento_compra?: string | null
+          descricao?: string | null
+          dias_atraso?: number | null
+          dias_faltam?: number | null
+          embarque?: string | null
+          emissao_pedido_sistema?: string | null
+          entrega_fornecedor?: string | null
+          eta?: string | null
+          etd?: string | null
+          follow_up?: string | null
+          fornecedor?: string | null
+          id?: string
+          item?: string | null
+          pi?: number | null
+          po?: string | null
+          prazo_cliente?: string | null
+          prazo_inicial_fornecedor?: string | null
+          preco_compra?: number | null
+          preco_venda?: number | null
+          qty_compra?: number | null
+          qty_venda?: number | null
+          status_compra_venda?: string | null
+          status_fornecedor?: string | null
+          status_producao?: string | null
+          venda_em_dias?: number | null
+        }
+        Relationships: []
+      }
+      po_documents: {
+        Row: {
+          categoria: string
+          created_at: string
+          doc_type: string
+          file_name: string
+          file_url: string
+          id: string
+          po: string
+        }
+        Insert: {
+          categoria?: string
+          created_at?: string
+          doc_type: string
+          file_name: string
+          file_url: string
+          id?: string
+          po: string
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          doc_type?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          po?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          cargo: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cargo?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cargo?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
