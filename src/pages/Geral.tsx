@@ -147,7 +147,9 @@ const Geral = () => {
       const qCompra = Number(r.qty_compra) || 0;
       const pVenda = Number(r.preco_venda) || 0;
       const pCompra = Number(r.preco_compra) || 0;
-      acc.valorCompra += pCompra * qCompra;
+      // Fallback: usa qty_venda se qty_compra estiver vazio (caso de Tubos)
+      const qCompraEff = qCompra > 0 ? qCompra : qVenda;
+      acc.valorCompra += pCompra * qCompraEff;
       acc.valorVenda += pVenda * qVenda;
       if (r.po) acc.pos.add(r.po);
       if (r.fornecedor) acc.fornecedores.add(r.fornecedor);
