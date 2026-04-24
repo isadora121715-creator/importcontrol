@@ -575,32 +575,37 @@ const Embarques = () => {
                 <CardHeader>
                   <CardTitle className="text-base">Fretes FCL Aproximados</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Full Container Load - Clique em um cartão para editar
+                    Full Container Load - Selecione o tipo de container
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {["20ft", "40ft", "45ft HC"].map((b) => (
-                      <span
+                    {(["20ft", "40ft", "45ft HC"] as const).map((b) => (
+                      <button
                         key={b}
-                        className="text-xs font-semibold bg-muted px-3 py-1 rounded-full"
+                        type="button"
+                        onClick={() => setSelectedFclTipo(b)}
+                        className={cn(
+                          "text-xs font-semibold px-3 py-1 rounded-full transition-colors",
+                          selectedFclTipo === b
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted hover:bg-muted/70",
+                        )}
                       >
                         {b}
-                      </span>
+                      </button>
                     ))}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {fretesFcl.map((f, idx) => (
-                      <button
-                        type="button"
+                    {fretesFclFiltrados.map((f, idx) => (
+                      <div
                         key={`${f.rota}-${idx}`}
-                        onClick={() => openEditFcl(idx)}
-                        className="text-left rounded-lg border p-4 space-y-2 hover:shadow-sm hover:border-primary transition-all group relative"
+                        className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-semibold">{f.rota}</p>
                           <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
-                            FCL
+                            FCL {f.tipo}
                           </span>
                         </div>
                         <p className="text-base font-bold text-primary">{f.valor}</p>
@@ -612,8 +617,7 @@ const Embarques = () => {
                           <span className="font-medium">Tempo:</span>
                           <span>{f.tempo}</span>
                         </div>
-                        <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </CardContent>
