@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
-const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v2";
+const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v3";
 
 // ---------------------------------------------------------------------------
 // CONTAINERS
