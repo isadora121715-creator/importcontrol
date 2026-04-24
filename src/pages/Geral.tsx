@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Package, Users, ShoppingCart, DollarSign, FileText } from "lucide-react";
+import { BarChart2, Package, Users, ShoppingCart, DollarSign, FileText, Download } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -19,6 +19,14 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DashboardLoadingSkeleton, DashboardErrorState } from "@/components/dashboard/DashboardStates";
 
 type PedidoSummary = {
@@ -26,6 +34,7 @@ type PedidoSummary = {
   status_fornecedor: string | null;
   status_compra_venda: string | null;
   fornecedor: string | null;
+  cliente: string | null;
   preco_venda: number | null;
   preco_compra: number | null;
   qty_venda: number | null;
@@ -100,7 +109,7 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("pedidos")
-      .select("categoria,status_fornecedor,status_compra_venda,fornecedor,preco_venda,preco_compra,qty_venda,qty_compra,po,embarque,prazo_cliente,emissao_pedido_sistema")
+      .select("categoria,status_fornecedor,status_compra_venda,fornecedor,cliente,preco_venda,preco_compra,qty_venda,qty_compra,po,embarque,prazo_cliente,emissao_pedido_sistema")
       .range(from, from + pageSize - 1);
     if (error) throw new Error("Erro ao carregar dados consolidados.");
     if (!data || data.length === 0) break;
@@ -110,6 +119,8 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
   return all;
 }
 
+type ReportDimension = "mes" | "fornecedor" | "cliente" | "po";
+
 const Geral = () => {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["pedidos-geral-summary"],
@@ -117,6 +128,81 @@ const Geral = () => {
     staleTime: 60_000,
     gcTime: 30 * 60_000,
   });
+
+  const [reportDim, setReportDim] = useState<ReportDimension>("mes");
+
+  const report = useMemo(() => {
+    const rows = data ?? [];
+    const map = new Map<string, { registros: number; pos: Set<string>; valorCompra: number; valorVenda: number }>();
+
+    rows.forEach((r) => {
+      let key: string | null = null;
+      if (reportDim === "mes") {
+        key = parseMonthKey(r.emissao_pedido_sistema) ?? parseMonthKey(r.prazo_cliente);
+      } else if (reportDim === "fornecedor") {
+        key = r.fornecedor;
+      } else if (reportDim === "cliente") {
+        key = r.cliente;
+      } else if (reportDim === "po") {
+        key = r.po;
+      }
+      if (!key) return;
+      if (!map.has(key)) map.set(key, { registros: 0, pos: new Set(), valorCompra: 0, valorVenda: 0 });
+      const acc = map.get(key)!;
+      acc.registros += 1;
+      if (r.po) acc.pos.add(r.po);
+      const qVenda = Number(r.qty_venda) || 0;
+      const qCompra = Number(r.qty_compra) || 0;
+      const pVenda = Number(r.preco_venda) || 0;
+      const pCompra = Number(r.preco_compra) || 0;
+      const qCompraEff = qCompra > 0 ? qCompra : qVenda;
+      acc.valorCompra += pCompra * qCompraEff;
+      acc.valorVenda += pVenda * qVenda;
+    });
+
+    return Array.from(map.entries())
+      .map(([key, v]) => ({
+        chave: reportDim === "mes" ? monthLabel(key) : key,
+        rawKey: key,
+        registros: v.registros,
+        pos: v.pos.size,
+        valorCompra: v.valorCompra,
+        valorVenda: v.valorVenda,
+      }))
+      .sort((a, b) => {
+        if (reportDim === "mes") return a.rawKey.localeCompare(b.rawKey);
+        return b.valorCompra - a.valorCompra;
+      });
+  }, [data, reportDim]);
+
+  const downloadReportCsv = () => {
+    const headers = [
+      reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO",
+      "Registros",
+      "POs Únicas",
+      "Valor de Compra (R$)",
+      "Valor de Venda (R$)",
+    ];
+    const csv = [
+      headers.join(";"),
+      ...report.map((r) =>
+        [
+          `"${(r.chave ?? "").toString().replace(/"/g, '""')}"`,
+          r.registros,
+          r.pos,
+          r.valorCompra.toFixed(2).replace(".", ","),
+          r.valorVenda.toFixed(2).replace(".", ","),
+        ].join(";"),
+      ),
+    ].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `relatorio-${reportDim}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const stats = useMemo(() => {
     const rows = data ?? [];
@@ -410,6 +496,78 @@ const Geral = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Relatório por dimensão */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Relatório por Dimensão
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Agrupe os dados por mês, fornecedor, cliente ou PO e exporte em CSV.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={reportDim} onValueChange={(v) => setReportDim(v as ReportDimension)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mes">Por Mês</SelectItem>
+                    <SelectItem value="fornecedor">Por Fornecedor</SelectItem>
+                    <SelectItem value="cliente">Por Cliente</SelectItem>
+                    <SelectItem value="po">Por PO</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={downloadReportCsv} disabled={report.length === 0}>
+                  <Download className="h-4 w-4 mr-2" /> Baixar CSV
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {report.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Nenhum dado disponível para esta dimensão.
+              </p>
+            ) : (
+              <div className="overflow-auto rounded-lg border max-h-[500px]">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">
+                        {reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO"}
+                      </th>
+                      <th className="text-right px-3 py-2 font-semibold">Registros</th>
+                      <th className="text-right px-3 py-2 font-semibold">POs Únicas</th>
+                      <th className="text-right px-3 py-2 font-semibold">Valor Compra</th>
+                      <th className="text-right px-3 py-2 font-semibold">Valor Venda</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.slice(0, 200).map((r) => (
+                      <tr key={r.rawKey} className="border-t hover:bg-muted/30">
+                        <td className="px-3 py-2 whitespace-nowrap font-medium">{r.chave}</td>
+                        <td className="px-3 py-2 text-right">{r.registros}</td>
+                        <td className="px-3 py-2 text-right">{r.pos}</td>
+                        <td className="px-3 py-2 text-right">{formatBRL(r.valorCompra)}</td>
+                        <td className="px-3 py-2 text-right">{formatBRL(r.valorVenda)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {report.length > 200 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    Mostrando 200 de {report.length} resultados — baixe o CSV para ver todos.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

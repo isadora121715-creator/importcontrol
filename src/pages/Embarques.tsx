@@ -7,9 +7,9 @@ import {
   Calculator,
   AlertTriangle,
   Upload,
-  Pencil,
   Trash2,
   FileSpreadsheet,
+  CheckCircle2,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { HeaderTabs } from "@/components/HeaderTabs";
@@ -24,19 +24,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const STORAGE_FCL_KEY = "embarques.fretes_fcl.v1";
-const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v1";
+const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
+const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v2";
 
 // ---------------------------------------------------------------------------
 // CONTAINERS
@@ -201,15 +193,28 @@ const FRETES_LCL = [
   { rota: "Miami → Porto de Santos (SP)", valor: "US$ 300-450 por m³", obs: "Importação rápida dos EUA", tempo: "8-12 dias" },
 ];
 
-type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string };
+type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string; tipo: "20ft" | "40ft" | "45ft HC" };
 
 const FRETES_FCL_DEFAULT: FreteFCL[] = [
-  { rota: "Shangai → Santos (FCL 20ft)", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias" },
-  { rota: "Shangai → Itajaí/Navegantes (FCL 20ft)", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias" },
-  { rota: "Shangai → Suape (FCL 20ft)", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias" },
-  { rota: "Roterdã → Santos (FCL 20ft)", valor: "US$ 1.000-1.500", capacidade: "18-20 toneladas", tempo: "45-55 dias" },
-  { rota: "Miami → Santos (FCL 20ft)", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias" },
-  { rota: "Miami → Suape (FCL 20ft)", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias" },
+  // 20ft
+  { rota: "Shangai → Santos", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias", tipo: "20ft" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias", tipo: "20ft" },
+  { rota: "Shangai → Suape", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias", tipo: "20ft" },
+  { rota: "Roterdã → Santos", valor: "US$ 1.000-1.500", capacidade: "18-20 toneladas", tempo: "45-55 dias", tipo: "20ft" },
+  { rota: "Miami → Santos", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias", tipo: "20ft" },
+  { rota: "Miami → Suape", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias", tipo: "20ft" },
+  // 40ft
+  { rota: "Shangai → Santos", valor: "US$ 2.000-3.000", capacidade: "26-28 toneladas", tempo: "40-50 dias", tipo: "40ft" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.100-3.100", capacidade: "26-28 toneladas", tempo: "41-51 dias", tipo: "40ft" },
+  { rota: "Shangai → Suape", valor: "US$ 2.200-3.200", capacidade: "26-28 toneladas", tempo: "42-52 dias", tipo: "40ft" },
+  { rota: "Roterdã → Santos", valor: "US$ 1.700-2.500", capacidade: "26-28 toneladas", tempo: "45-55 dias", tipo: "40ft" },
+  { rota: "Miami → Santos", valor: "US$ 1.400-2.000", capacidade: "26-28 toneladas", tempo: "8-12 dias", tipo: "40ft" },
+  { rota: "Miami → Suape", valor: "US$ 1.500-2.100", capacidade: "26-28 toneladas", tempo: "10-14 dias", tipo: "40ft" },
+  // 45ft HC
+  { rota: "Shangai → Santos", valor: "US$ 2.500-3.500", capacidade: "28-30 toneladas", tempo: "40-50 dias", tipo: "45ft HC" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.600-3.600", capacidade: "28-30 toneladas", tempo: "41-51 dias", tipo: "45ft HC" },
+  { rota: "Roterdã → Santos", valor: "US$ 2.200-3.000", capacidade: "28-30 toneladas", tempo: "45-55 dias", tipo: "45ft HC" },
+  { rota: "Miami → Santos", valor: "US$ 1.800-2.500", capacidade: "28-30 toneladas", tempo: "8-12 dias", tipo: "45ft HC" },
 ];
 
 type FreteIntl = Record<string, string | number>;
@@ -227,26 +232,13 @@ const Embarques = () => {
   const { toast } = useToast();
   const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
 
-  // Fretes FCL (editáveis + persistência)
-  const [fretesFcl, setFretesFcl] = useState<FreteFCL[]>(() => {
-    if (typeof window === "undefined") return FRETES_FCL_DEFAULT;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_FCL_KEY);
-      return raw ? (JSON.parse(raw) as FreteFCL[]) : FRETES_FCL_DEFAULT;
-    } catch {
-      return FRETES_FCL_DEFAULT;
-    }
-  });
-  const [editingFclIndex, setEditingFclIndex] = useState<number | null>(null);
-  const [editFclDraft, setEditFclDraft] = useState<FreteFCL | null>(null);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_FCL_KEY, JSON.stringify(fretesFcl));
-    } catch {
-      /* ignore */
-    }
-  }, [fretesFcl]);
+  // Fretes FCL — agora apenas exibição filtrada por tipo de container
+  const [fretesFcl] = useState<FreteFCL[]>(FRETES_FCL_DEFAULT);
+  const [selectedFclTipo, setSelectedFclTipo] = useState<"20ft" | "40ft" | "45ft HC">("20ft");
+  const fretesFclFiltrados = useMemo(
+    () => fretesFcl.filter((f) => f.tipo === selectedFclTipo),
+    [fretesFcl, selectedFclTipo],
+  );
 
   // Internacionais (planilha persistida)
   const [intlRows, setIntlRows] = useState<FreteIntl[]>([]);
@@ -311,19 +303,155 @@ const Embarques = () => {
     window.localStorage.removeItem(STORAGE_INTL_KEY);
   };
 
-  const openEditFcl = (idx: number) => {
-    setEditingFclIndex(idx);
-    setEditFclDraft({ ...fretesFcl[idx] });
+  // ---- Filtros e estatísticas para Internacionais ----
+  const [intlFilterTipo, setIntlFilterTipo] = useState<string>("Todos");
+  const [intlFilterPO, setIntlFilterPO] = useState<string>("");
+  const [intlFilterExp, setIntlFilterExp] = useState<string>("Todos");
+  const [intlFilterAgente, setIntlFilterAgente] = useState<string>("Todos");
+
+  const intlField = useMemo(() => {
+    const norm = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+    const find = (...needles: string[]) =>
+      intlColumns.find((c) => needles.some((n) => norm(c).includes(n))) ?? null;
+    return {
+      po: find("po"),
+      exportador: find("exportador", "shipper", "fornecedor"),
+      agente: find("agente", "agent"),
+      container: find("container", "modalidade", "tipo"),
+      qtdContainer: find("qtd cont", "qty cont", "quantidade cont"),
+      peso: find("peso", "kg", "weight"),
+      valor: find("valor", "preco", "price", "frete", "freight", "taxa"),
+      mes: find("mes", "month", "data", "date"),
+      praco: find("praco", "prazo", "lead"),
+    };
+  }, [intlColumns]);
+
+  const detectQty = (v: unknown): number => {
+    if (typeof v === "number") return v;
+    if (!v) return 0;
+    const n = Number(String(v).replace(/[^\d.,-]/g, "").replace(",", "."));
+    return isNaN(n) ? 0 : n;
   };
-  const saveEditFcl = () => {
-    if (editingFclIndex === null || !editFclDraft) return;
-    setFretesFcl((prev) =>
-      prev.map((f, i) => (i === editingFclIndex ? editFclDraft : f)),
-    );
-    setEditingFclIndex(null);
-    setEditFclDraft(null);
-    toast({ title: "Frete atualizado" });
+
+  const detectMonth = (v: unknown): string | null => {
+    if (!v) return null;
+    if (typeof v === "number") {
+      const utcDays = Math.floor(v - 25569);
+      const date = new Date(utcDays * 86400000);
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    }
+    const s = String(v).trim();
+    const br = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (br) {
+      const y = br[3].length === 2 ? `20${br[3]}` : br[3];
+      return `${y}-${br[2].padStart(2, "0")}`;
+    }
+    const iso = s.match(/^(\d{4})-(\d{1,2})/);
+    if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}`;
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return null;
   };
+
+  const intlStats = useMemo(() => {
+    const rows = intlRows;
+    const containers = { "20ft": 0, "40ft": 0, "45ft": 0 };
+    const modalidades = { LCL: 0, FCL: 0, Aereo: 0 };
+    const exportadores = new Set<string>();
+    const agentes = new Set<string>();
+    const meses = new Set<string>();
+    let pesoTotal = 0;
+    let valorTotal = 0;
+    const monthMap = new Map<string, { containers: number; peso: number }>();
+
+    rows.forEach((r) => {
+      const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
+      const qtd = intlField.qtdContainer ? detectQty(r[intlField.qtdContainer]) || 1 : 1;
+      if (cont.includes("20")) containers["20ft"] += qtd;
+      else if (cont.includes("45")) containers["45ft"] += qtd;
+      else if (cont.includes("40")) containers["40ft"] += qtd;
+
+      if (cont.includes("lcl")) modalidades.LCL += 1;
+      else if (cont.includes("aer") || cont.includes("air")) modalidades.Aereo += 1;
+      else if (cont.includes("fcl") || cont.includes("20") || cont.includes("40") || cont.includes("45")) modalidades.FCL += 1;
+
+      if (intlField.exportador && r[intlField.exportador]) exportadores.add(String(r[intlField.exportador]));
+      if (intlField.agente && r[intlField.agente]) agentes.add(String(r[intlField.agente]));
+
+      if (intlField.peso) pesoTotal += detectQty(r[intlField.peso]);
+      if (intlField.valor) valorTotal += detectQty(r[intlField.valor]);
+
+      if (intlField.mes) {
+        const mk = detectMonth(r[intlField.mes]);
+        if (mk) {
+          meses.add(mk);
+          if (!monthMap.has(mk)) monthMap.set(mk, { containers: 0, peso: 0 });
+          const m = monthMap.get(mk)!;
+          m.containers += qtd;
+          m.peso += intlField.peso ? detectQty(r[intlField.peso]) : 0;
+        }
+      }
+    });
+
+    const totalContainers = containers["20ft"] + containers["40ft"] + containers["45ft"];
+    const monthsList = Array.from(meses).sort();
+    const mediaContainers = monthsList.length > 0 ? totalContainers / monthsList.length : 0;
+    const mediaKgMes = monthsList.length > 0 ? pesoTotal / monthsList.length : 0;
+    const detalhesPorMes = monthsList.map((mk) => ({
+      mes: mk,
+      containers: monthMap.get(mk)?.containers ?? 0,
+      peso: monthMap.get(mk)?.peso ?? 0,
+    }));
+
+    return {
+      containers,
+      modalidades,
+      exportadores: Array.from(exportadores).sort(),
+      agentes: Array.from(agentes).sort(),
+      meses: monthsList,
+      pesoTotal,
+      valorTotal,
+      totalContainers,
+      mediaContainers,
+      mediaKgMes,
+      detalhesPorMes,
+    };
+  }, [intlRows, intlField]);
+
+  const intlRowsFiltradas = useMemo(() => {
+    return intlRows.filter((r) => {
+      if (intlFilterTipo !== "Todos" && intlField.container) {
+        const cont = String(r[intlField.container] ?? "").toLowerCase();
+        if (!cont.includes(intlFilterTipo.toLowerCase())) return false;
+      }
+      if (intlFilterPO && intlField.po) {
+        const po = String(r[intlField.po] ?? "").toLowerCase();
+        if (!po.includes(intlFilterPO.toLowerCase())) return false;
+      }
+      if (intlFilterExp !== "Todos" && intlField.exportador) {
+        if (String(r[intlField.exportador] ?? "") !== intlFilterExp) return false;
+      }
+      if (intlFilterAgente !== "Todos" && intlField.agente) {
+        if (String(r[intlField.agente] ?? "") !== intlFilterAgente) return false;
+      }
+      return true;
+    });
+  }, [intlRows, intlField, intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente]);
+
+  const formatBRLIntl = (v: number) =>
+    `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatPesoApprox = (v: number) => {
+    if (v >= 1_000_000) return `~${(v / 1_000_000).toFixed(1)}M kg`;
+    if (v >= 1_000) return `~${(v / 1_000).toFixed(1)}k kg`;
+    return `~${v.toFixed(0)} kg`;
+  };
+  const monthLabelKey = (key: string) => key;
+
 
   // Simulador
   const [tipoFrete, setTipoFrete] = useState("Marítimo");
@@ -587,32 +715,37 @@ const Embarques = () => {
                 <CardHeader>
                   <CardTitle className="text-base">Fretes FCL Aproximados</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Full Container Load - Clique em um cartão para editar
+                    Full Container Load - Selecione o tipo de container
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {["20ft", "40ft", "45ft HC"].map((b) => (
-                      <span
+                    {(["20ft", "40ft", "45ft HC"] as const).map((b) => (
+                      <button
                         key={b}
-                        className="text-xs font-semibold bg-muted px-3 py-1 rounded-full"
+                        type="button"
+                        onClick={() => setSelectedFclTipo(b)}
+                        className={cn(
+                          "text-xs font-semibold px-3 py-1 rounded-full transition-colors",
+                          selectedFclTipo === b
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted hover:bg-muted/70",
+                        )}
                       >
                         {b}
-                      </span>
+                      </button>
                     ))}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {fretesFcl.map((f, idx) => (
-                      <button
-                        type="button"
+                    {fretesFclFiltrados.map((f, idx) => (
+                      <div
                         key={`${f.rota}-${idx}`}
-                        onClick={() => openEditFcl(idx)}
-                        className="text-left rounded-lg border p-4 space-y-2 hover:shadow-sm hover:border-primary transition-all group relative"
+                        className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-semibold">{f.rota}</p>
                           <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
-                            FCL
+                            FCL {f.tipo}
                           </span>
                         </div>
                         <p className="text-base font-bold text-primary">{f.valor}</p>
@@ -624,8 +757,7 @@ const Embarques = () => {
                           <span className="font-medium">Tempo:</span>
                           <span>{f.tempo}</span>
                         </div>
-                        <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </CardContent>
@@ -673,22 +805,32 @@ const Embarques = () => {
           <TabsContent value="internacionais" className="space-y-6 mt-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Fretes Internacionais</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Cotações de frete para importação (China/Exterior → Brasil)
-                </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-base">Fretes Internacionais</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Cotações de frete para importação (China/Exterior → Brasil)
+                    </p>
+                  </div>
+                  {intlRows.length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="flex items-center gap-1 text-emerald-500 font-semibold">
+                        <CheckCircle2 className="h-4 w-4" /> {intlRows.length} registros carregados
+                      </span>
+                      <Button size="sm" variant="ghost" onClick={clearIntl} className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4 mr-1" /> Limpar
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <div>
-                  <h4 className="text-sm font-semibold mb-2">
-                    Carregar Planilha de Cotações
-                  </h4>
-                  <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
+                  <h4 className="text-sm font-semibold mb-2">Carregar Planilha de Cotações</h4>
+                  <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-4 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      {intlRows.length > 0
-                        ? "Atualizar planilha (substituirá os dados atuais)"
-                        : "Carregar Planilha de Fretes"}
+                      {intlRows.length > 0 ? "Atualizar Planilha de Fretes" : "Carregar Planilha de Fretes"}
                     </span>
                     <input
                       type="file"
@@ -702,77 +844,239 @@ const Embarques = () => {
                     />
                   </label>
                   <p className="text-xs text-muted-foreground mt-2">
-                    A primeira linha da planilha deve conter os nomes das
-                    colunas. Os dados ficam salvos no navegador e só são
-                    atualizados ao carregar uma nova planilha.
+                    Os dados estão salvos no navegador. Faça upload de um novo arquivo para atualizar.
                   </p>
                 </div>
 
-                {intlRows.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
-                      <div className="flex items-center gap-2 text-sm">
-                        <FileSpreadsheet className="h-4 w-4 text-primary" />
-                        <span className="font-semibold">{intlFileName}</span>
-                        <span className="text-muted-foreground">
-                          · {intlRows.length} registros
-                        </span>
-                        {intlUploadedAt && (
-                          <span className="text-xs text-muted-foreground">
-                            · {new Date(intlUploadedAt).toLocaleString("pt-BR")}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={clearIntl}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" /> Limpar
-                      </Button>
-                    </div>
-                    <div className="overflow-auto rounded-lg border max-h-[500px]">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50 sticky top-0">
-                          <tr>
-                            {intlColumns.map((c) => (
-                              <th
-                                key={c}
-                                className="text-left px-3 py-2 font-semibold whitespace-nowrap"
-                              >
-                                {c}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {intlRows.map((row, i) => (
-                            <tr key={i} className="border-t hover:bg-muted/30">
-                              {intlColumns.map((c) => (
-                                <td
-                                  key={c}
-                                  className="px-3 py-2 whitespace-nowrap"
-                                >
-                                  {String(row[c] ?? "")}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
+                {intlRows.length === 0 ? (
                   <div className="rounded-lg border bg-muted/30 p-4">
-                    <h4 className="text-sm font-semibold mb-1">
-                      Nenhuma planilha carregada
-                    </h4>
+                    <h4 className="text-sm font-semibold mb-1">Nenhuma planilha carregada</h4>
                     <p className="text-sm text-muted-foreground">
-                      Os fretes serão exibidos aqui após o carregamento da
-                      planilha. Os dados ficarão salvos automaticamente.
+                      Os fretes serão exibidos aqui após o carregamento da planilha. Os dados ficarão salvos automaticamente.
                     </p>
                   </div>
+                ) : (
+                  <>
+                    {/* KPI cards superiores */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
+                        <p className="text-xs text-blue-500 font-semibold">Containers 20ft</p>
+                        <p className="text-2xl font-bold">{intlStats.containers["20ft"]}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
+                        <p className="text-xs text-blue-500 font-semibold">Containers 40ft</p>
+                        <p className="text-2xl font-bold">{intlStats.containers["40ft"]}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
+                        <p className="text-xs text-blue-500 font-semibold">Containers 45ft</p>
+                        <p className="text-2xl font-bold">{intlStats.containers["45ft"]}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-emerald-500/40 p-3 text-center">
+                        <p className="text-xs text-emerald-500 font-semibold">Peso Total (aprox.)</p>
+                        <p className="text-2xl font-bold">{formatPesoApprox(intlStats.pesoTotal)}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-fuchsia-500/40 p-3 text-center">
+                        <p className="text-xs text-fuchsia-500 font-semibold">Agentes</p>
+                        <p className="text-2xl font-bold">{intlStats.agentes.length}</p>
+                      </div>
+                    </div>
+
+                    {/* Modalidades */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="rounded-lg border-2 border-emerald-500/40 p-3">
+                        <p className="text-xs text-emerald-500 font-semibold">Modalidade LCL</p>
+                        <p className="text-2xl font-bold">{intlStats.modalidades.LCL}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-500/40 p-3">
+                        <p className="text-xs text-blue-500 font-semibold">Modalidade FCL</p>
+                        <p className="text-2xl font-bold">{intlStats.modalidades.FCL}</p>
+                      </div>
+                      <div className="rounded-lg border-2 border-orange-500/40 p-3">
+                        <p className="text-xs text-orange-500 font-semibold">Modalidade Aéreo</p>
+                        <p className="text-2xl font-bold">{intlStats.modalidades.Aereo}</p>
+                      </div>
+                    </div>
+
+                    {/* Valor total */}
+                    <div className="rounded-lg border-2 border-emerald-500/40 p-4">
+                      <p className="text-sm text-emerald-500 font-semibold">Valor Total de Fretes</p>
+                      <p className="text-2xl font-bold text-emerald-500">{formatBRLIntl(intlStats.valorTotal)}</p>
+                    </div>
+
+                    {/* Filtros */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Filtros</CardTitle>
+                      </CardHeader>
+                      <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Tipo de Container</label>
+                          <Select value={intlFilterTipo} onValueChange={setIntlFilterTipo}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos</SelectItem>
+                              <SelectItem value="20">20ft</SelectItem>
+                              <SelectItem value="40">40ft</SelectItem>
+                              <SelectItem value="45">45ft</SelectItem>
+                              <SelectItem value="LCL">LCL</SelectItem>
+                              <SelectItem value="Aéreo">Aéreo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">PO (Pesquisar)</label>
+                          <Input
+                            placeholder="Digite a PO..."
+                            value={intlFilterPO}
+                            onChange={(e) => setIntlFilterPO(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Exportador</label>
+                          <Select value={intlFilterExp} onValueChange={setIntlFilterExp}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos</SelectItem>
+                              {intlStats.exportadores.map((e) => (
+                                <SelectItem key={e} value={e}>{e}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Agente</label>
+                          <Select value={intlFilterAgente} onValueChange={setIntlFilterAgente}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos</SelectItem>
+                              {intlStats.agentes.map((a) => (
+                                <SelectItem key={a} value={a}>{a}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Mês</label>
+                          <Select defaultValue="Todos">
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Todos">Todos os meses</SelectItem>
+                              {intlStats.meses.map((m) => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Quantidade Média */}
+                    <Card className="border-blue-500/40 border-2">
+                      <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Quantidade Média de Containers por Mês</p>
+                          <p className="text-3xl font-bold text-blue-500">{intlStats.mediaContainers.toFixed(1)}</p>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-0.5">
+                          <p>Total de meses: {intlStats.meses.length}</p>
+                          <p>Total de containers: {intlStats.totalContainers}</p>
+                          <p>Média de kg/mês: {(intlStats.mediaKgMes / 1000).toFixed(1)}k kg</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Detalhes por Mês */}
+                    {intlStats.detalhesPorMes.length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm">Detalhes por Mês</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {intlStats.detalhesPorMes.map((d) => (
+                            <div key={d.mes} className="rounded-lg border-2 border-blue-500/40 p-3">
+                              <p className="text-xs font-semibold">{monthLabelKey(d.mes)}</p>
+                              <p className="text-lg font-bold">{d.containers} containers</p>
+                              <p className="text-xs text-muted-foreground">{(d.peso / 1000).toFixed(1)}k kg</p>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Listagem de rotas */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">{intlRowsFiltradas.length} de {intlRows.length} rotas</p>
+                    </div>
+                    <div className="space-y-2">
+                      {intlRowsFiltradas.slice(0, 50).map((row, i) => {
+                        const po = intlField.po ? String(row[intlField.po] ?? "") : "";
+                        const exp = intlField.exportador ? String(row[intlField.exportador] ?? "") : "";
+                        const cont = intlField.container ? String(row[intlField.container] ?? "") : "";
+                        const qtd = intlField.qtdContainer ? String(row[intlField.qtdContainer] ?? "") : "";
+                        const valor = intlField.valor ? detectQty(row[intlField.valor]) : 0;
+                        const praco = intlField.praco ? String(row[intlField.praco] ?? "") : "";
+                        return (
+                          <div key={i} className="rounded-lg border p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-semibold text-blue-500">{po || `Linha ${i + 1}`}</p>
+                              <p className="text-base font-bold text-emerald-500">$ {valor.toFixed(0)}</p>
+                            </div>
+                            {exp && <p className="text-sm">⚓ {exp}</p>}
+                            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+                              {praco && (
+                                <div>
+                                  <p className="text-muted-foreground">Praço</p>
+                                  <p className="font-semibold">{praco}</p>
+                                </div>
+                              )}
+                              {cont && (
+                                <div>
+                                  <p className="text-muted-foreground">Container</p>
+                                  <p className="font-semibold">{cont}</p>
+                                </div>
+                              )}
+                              {qtd && (
+                                <div>
+                                  <p className="text-muted-foreground">Qtd Container</p>
+                                  <p className="font-semibold">{qtd}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {intlRowsFiltradas.length > 50 && (
+                        <p className="text-xs text-muted-foreground text-center">Mostrando 50 de {intlRowsFiltradas.length} resultados</p>
+                      )}
+                    </div>
+
+                    {/* Tabela bruta */}
+                    <details className="rounded-lg border">
+                      <summary className="cursor-pointer px-4 py-2 text-sm font-semibold flex items-center gap-2">
+                        <FileSpreadsheet className="h-4 w-4" /> Ver tabela completa ({intlFileName})
+                      </summary>
+                      <div className="overflow-auto max-h-[500px]">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50 sticky top-0">
+                            <tr>
+                              {intlColumns.map((c) => (
+                                <th key={c} className="text-left px-3 py-2 font-semibold whitespace-nowrap">{c}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {intlRows.map((row, i) => (
+                              <tr key={i} className="border-t hover:bg-muted/30">
+                                {intlColumns.map((c) => (
+                                  <td key={c} className="px-3 py-2 whitespace-nowrap">{String(row[c] ?? "")}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -984,81 +1288,6 @@ const Embarques = () => {
         </Tabs>
       </main>
 
-      {/* Dialog de edição de Frete FCL */}
-      <Dialog
-        open={editingFclIndex !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditingFclIndex(null);
-            setEditFclDraft(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar Frete FCL</DialogTitle>
-          </DialogHeader>
-          {editFclDraft && (
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="fcl-rota">Rota</Label>
-                <Input
-                  id="fcl-rota"
-                  value={editFclDraft.rota}
-                  onChange={(e) =>
-                    setEditFclDraft({ ...editFclDraft, rota: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="fcl-valor">Valor</Label>
-                <Input
-                  id="fcl-valor"
-                  value={editFclDraft.valor}
-                  onChange={(e) =>
-                    setEditFclDraft({ ...editFclDraft, valor: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="fcl-cap">Capacidade</Label>
-                <Input
-                  id="fcl-cap"
-                  value={editFclDraft.capacidade}
-                  onChange={(e) =>
-                    setEditFclDraft({
-                      ...editFclDraft,
-                      capacidade: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="fcl-tempo">Tempo</Label>
-                <Input
-                  id="fcl-tempo"
-                  value={editFclDraft.tempo}
-                  onChange={(e) =>
-                    setEditFclDraft({ ...editFclDraft, tempo: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditingFclIndex(null);
-                setEditFclDraft(null);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={saveEditFcl}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
