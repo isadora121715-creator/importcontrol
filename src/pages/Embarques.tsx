@@ -201,7 +201,9 @@ const FRETES_LCL = [
   { rota: "Miami → Porto de Santos (SP)", valor: "US$ 300-450 por m³", obs: "Importação rápida dos EUA", tempo: "8-12 dias" },
 ];
 
-const FRETES_FCL = [
+type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string };
+
+const FRETES_FCL_DEFAULT: FreteFCL[] = [
   { rota: "Shangai → Santos (FCL 20ft)", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias" },
   { rota: "Shangai → Itajaí/Navegantes (FCL 20ft)", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias" },
   { rota: "Shangai → Suape (FCL 20ft)", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias" },
@@ -209,6 +211,8 @@ const FRETES_FCL = [
   { rota: "Miami → Santos (FCL 20ft)", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias" },
   { rota: "Miami → Suape (FCL 20ft)", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias" },
 ];
+
+type FreteIntl = Record<string, string | number>;
 
 const ROTAS_AEREAS = [
   "Xangai (PVG) → São Paulo (GRU): 5-7 dias",
