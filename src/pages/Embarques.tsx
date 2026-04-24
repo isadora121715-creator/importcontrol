@@ -483,20 +483,34 @@ const Embarques = () => {
       peso: monthMap.get(mk)?.peso ?? 0,
     }));
 
+    // Sobrescreve com totais oficiais lidos da planilha (linha 365 / coluna E)
+    const containersFinal = {
+      "20ft": intlTotals.cont20 || containers["20ft"],
+      "40ft": intlTotals.cont40 || containers["40ft"],
+      "45ft": intlTotals.cont45 || containers["45ft"],
+    };
+    const modalidadesFinal = {
+      LCL: modalidades.LCL,
+      FCL: modalidades.FCL,
+      Aereo: intlTotals.aereo || modalidades.Aereo,
+    };
+    const totalContainersFinal =
+      containersFinal["20ft"] + containersFinal["40ft"] + containersFinal["45ft"];
+
     return {
-      containers,
-      modalidades,
+      containers: containersFinal,
+      modalidades: modalidadesFinal,
       exportadores: Array.from(exportadores).sort(),
       agentes: Array.from(agentes).sort(),
       meses: monthsList,
       pesoTotal,
       valorTotal,
-      totalContainers,
-      mediaContainers,
+      totalContainers: totalContainersFinal,
+      mediaContainers: monthsList.length > 0 ? totalContainersFinal / monthsList.length : 0,
       mediaKgMes,
       detalhesPorMes,
     };
-  }, [intlRows, intlField]);
+  }, [intlRows, intlField, intlTotals]);
 
   const intlRowsFiltradas = useMemo(() => {
     return intlRows.filter((r) => {
