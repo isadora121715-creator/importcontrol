@@ -156,13 +156,11 @@ export function parseExcelValvulas(file: File): Promise<PedidoRow[]> {
             if (norm === "qty") {
               // QTY in PEDIDO DE VENDA section (column index 5) = qtyVenda
               // QTY in PEDIDO DE COMPRA section (column index 21) = qtyCompra
-              field = hdrIdx === 5 ? "qtyVenda" : hdrIdx === 21 ? "qtyCompra" : undefined;
+              field = (hdrIdx === 5 ? "qtyVenda" : hdrIdx === 21 ? "qtyCompra" : undefined) as keyof PedidoRow | undefined;
             } else if (norm === "item") {
-              // Only take item from PEDIDO DE VENDA section (column index 1)
-              field = hdrIdx === 1 ? "item" : undefined;
+              field = (hdrIdx === 1 ? "item" : undefined) as keyof PedidoRow | undefined;
             } else if (norm === "codigo") {
-              // Only take codigo from PEDIDO DE VENDA section (column index 3)
-              field = hdrIdx === 3 ? "codigo" : undefined;
+              field = (hdrIdx === 3 ? "codigo" : undefined) as keyof PedidoRow | undefined;
             }
 
             if (field) {
