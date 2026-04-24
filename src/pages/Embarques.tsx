@@ -10,6 +10,8 @@ import {
   Trash2,
   FileSpreadsheet,
   CheckCircle2,
+  DownloadCloud,
+  ChevronDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { HeaderTabs } from "@/components/HeaderTabs";
@@ -23,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -378,11 +381,22 @@ const Embarques = () => {
     window.localStorage.removeItem(STORAGE_INTL_KEY);
   };
 
+  const downloadIntlFrete = () => {
+    if (intlRows.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(intlRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Fretes Internacionais");
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Fretes_Internacionais_${today}.xlsx`);
+  };
+
   // ---- Filtros e estatísticas para Internacionais ----
   const [intlFilterTipo, setIntlFilterTipo] = useState<string>("Todos");
   const [intlFilterPO, setIntlFilterPO] = useState<string>("");
   const [intlFilterExp, setIntlFilterExp] = useState<string>("Todos");
   const [intlFilterAgente, setIntlFilterAgente] = useState<string>("Todos");
+  const [intlFilterMeses, setIntlFilterMeses] = useState<string[]>([]);
+  const [rotasVisiveis, setRotasVisiveis] = useState<number>(10);
 
   const intlField = useMemo(() => {
     const norm = (s: string) =>
@@ -528,9 +542,17 @@ const Embarques = () => {
       if (intlFilterAgente !== "Todos" && intlField.agente) {
         if (String(r[intlField.agente] ?? "") !== intlFilterAgente) return false;
       }
+      if (intlFilterMeses.length > 0 && intlField.mes) {
+        const mk = detectMonth(r[intlField.mes]);
+        if (!mk || !intlFilterMeses.includes(mk)) return false;
+      }
       return true;
     });
-  }, [intlRows, intlField, intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente]);
+  }, [intlRows, intlField, intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente, intlFilterMeses]);
+
+  useEffect(() => {
+    setRotasVisiveis(10);
+  }, [intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente, intlFilterMeses]);
 
   const formatBRLIntl = (v: number) =>
     `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -906,6 +928,9 @@ const Embarques = () => {
                       <span className="flex items-center gap-1 text-emerald-500 font-semibold">
                         <CheckCircle2 className="h-4 w-4" /> {intlRows.length} registros carregados
                       </span>
+                      <Button size="sm" variant="outline" onClick={downloadIntlFrete}>
+                        <DownloadCloud className="h-4 w-4 mr-1" /> Baixar
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={clearIntl} className="text-destructive hover:text-destructive">
                         <Trash2 className="h-4 w-4 mr-1" /> Limpar
                       </Button>
@@ -1046,15 +1071,50 @@ const Embarques = () => {
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Mês</label>
-                          <Select defaultValue="Todos">
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Todos">Todos os meses</SelectItem>
-                              {intlStats.meses.map((m) => (
-                                <SelectItem key={m} value={m}>{m}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-between text-sm font-normal h-9 px-3">
+                                <span className="truncate">
+                                  {intlFilterMeses.length === 0
+                                    ? "Todos os meses"
+                                    : intlFilterMeses.length === 1
+                                    ? intlFilterMeses[0]
+                                    : `${intlFilterMeses.length} meses`}
+                                </span>
+                                <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-48 p-2" align="start">
+                              <div className="space-y-1 max-h-52 overflow-y-auto">
+                                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5"
+                                    checked={intlFilterMeses.length === 0}
+                                    onChange={() => setIntlFilterMeses([])}
+                                  />
+                                  Todos os meses
+                                </label>
+                                {intlStats.meses.map((m) => (
+                                  <label key={m} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5"
+                                      checked={intlFilterMeses.includes(m)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setIntlFilterMeses((prev) => [...prev, m]);
+                                        } else {
+                                          setIntlFilterMeses((prev) => prev.filter((x) => x !== m));
+                                        }
+                                      }}
+                                    />
+                                    {m}
+                                  </label>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                       </CardContent>
                     </Card>
@@ -1094,39 +1154,57 @@ const Embarques = () => {
 
                     {/* Listagem de rotas */}
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold">{intlRowsFiltradas.length} de {intlRows.length} rotas</p>
+                      <p className="text-sm font-semibold">
+                        Mostrando {Math.min(rotasVisiveis, intlRowsFiltradas.length)} de {intlRowsFiltradas.length} rotas
+                        {intlRowsFiltradas.length !== intlRows.length && ` (total: ${intlRows.length})`}
+                      </p>
                     </div>
                     <div className="space-y-2">
-                      {intlRowsFiltradas.slice(0, 50).map((row, i) => {
+                      {intlRowsFiltradas.slice(0, rotasVisiveis).map((row, i) => {
                         const po = intlField.po ? String(row[intlField.po] ?? "") : "";
                         const exp = intlField.exportador ? String(row[intlField.exportador] ?? "") : "";
                         const cont = intlField.container ? String(row[intlField.container] ?? "") : "";
                         const qtd = intlField.qtdContainer ? String(row[intlField.qtdContainer] ?? "") : "";
                         const valor = intlField.valor ? detectQty(row[intlField.valor]) : 0;
                         const praco = intlField.praco ? String(row[intlField.praco] ?? "") : "";
+                        const contLower = cont.toLowerCase();
+                        const contTipo = contLower.includes("lcl") ? "LCL" : contLower.includes("aer") || contLower.includes("air") ? "Aéreo" : contLower.includes("fcl") ? "FCL" : cont.replace(/\d+['"]?\s*(ft|hc)?/gi, "").trim() || "FCL";
+                        const contSize = cont.match(/(\d+['"]?\s*(?:ft|hc|HC)?)/i)?.[1]?.trim() ?? "";
                         return (
                           <div key={i} className="rounded-lg border p-4">
                             <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-semibold text-blue-500">{po || `Linha ${i + 1}`}</p>
-                              <p className="text-base font-bold text-emerald-500">$ {valor.toFixed(0)}</p>
+                              <div>
+                                <p className="text-sm font-semibold text-blue-500">{po || `Linha ${i + 1}`}</p>
+                                {exp && (
+                                  <p className="text-sm mt-0.5 text-foreground">
+                                    ⚓ {exp}
+                                    {po && <span className="ml-2 text-xs text-muted-foreground font-normal">PO: {po}</span>}
+                                  </p>
+                                )}
+                              </div>
+                              {valor > 0 && (
+                                <p className="text-base font-bold text-emerald-500">
+                                  $ {valor.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                </p>
+                              )}
                             </div>
-                            {exp && <p className="text-sm">⚓ {exp}</p>}
                             <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
                               {praco && (
                                 <div>
-                                  <p className="text-muted-foreground">Praço</p>
+                                  <p className="text-muted-foreground">Prazo</p>
                                   <p className="font-semibold">{praco}</p>
                                 </div>
                               )}
                               {cont && (
                                 <div>
-                                  <p className="text-muted-foreground">Container</p>
-                                  <p className="font-semibold">{cont}</p>
+                                  <p className="text-muted-foreground">Tipo</p>
+                                  <p className="font-semibold">{contTipo}</p>
+                                  {contSize && <p className="text-muted-foreground">{contSize}</p>}
                                 </div>
                               )}
                               {qtd && (
                                 <div>
-                                  <p className="text-muted-foreground">Qtd Container</p>
+                                  <p className="text-muted-foreground">Qtd</p>
                                   <p className="font-semibold">{qtd}</p>
                                 </div>
                               )}
@@ -1134,31 +1212,79 @@ const Embarques = () => {
                           </div>
                         );
                       })}
-                      {intlRowsFiltradas.length > 50 && (
-                        <p className="text-xs text-muted-foreground text-center">Mostrando 50 de {intlRowsFiltradas.length} resultados</p>
+                      {intlRowsFiltradas.length > rotasVisiveis && (
+                        <div className="text-center pt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setRotasVisiveis((v) => v + 10)}
+                          >
+                            Carregar mais ({Math.min(10, intlRowsFiltradas.length - rotasVisiveis)} de {intlRowsFiltradas.length - rotasVisiveis} restantes)
+                          </Button>
+                        </div>
                       )}
                     </div>
 
-                    {/* Tabela bruta */}
+                    {/* Tabela completa */}
                     <details className="rounded-lg border">
-                      <summary className="cursor-pointer px-4 py-2 text-sm font-semibold flex items-center gap-2">
-                        <FileSpreadsheet className="h-4 w-4" /> Ver tabela completa ({intlFileName})
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold flex items-center gap-2 select-none">
+                        <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                        Tabela completa
+                        {intlFileName && <span className="text-xs font-normal text-muted-foreground">— {intlFileName}</span>}
+                        <span className="ml-auto text-xs font-normal text-muted-foreground">{intlRows.length} registros</span>
                       </summary>
-                      <div className="overflow-auto max-h-[500px]">
-                        <table className="w-full text-sm">
-                          <thead className="bg-muted/50 sticky top-0">
-                            <tr>
+                      <div className="overflow-auto max-h-[600px]">
+                        <table className="w-full text-xs border-collapse">
+                          <thead className="sticky top-0 z-10">
+                            <tr className="bg-muted border-b">
                               {intlColumns.map((c) => (
-                                <th key={c} className="text-left px-3 py-2 font-semibold whitespace-nowrap">{c}</th>
+                                <th key={c} className="text-left px-3 py-2 font-semibold whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  {c}
+                                </th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
                             {intlRows.map((row, i) => (
-                              <tr key={i} className="border-t hover:bg-muted/30">
-                                {intlColumns.map((c) => (
-                                  <td key={c} className="px-3 py-2 whitespace-nowrap">{String(row[c] ?? "")}</td>
-                                ))}
+                              <tr key={i} className={cn("border-b transition-colors", i % 2 === 0 ? "bg-background" : "bg-muted/20", "hover:bg-primary/5")}>
+                                {intlColumns.map((c) => {
+                                  const v = row[c];
+                                  const norm = c.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+                                  const isValue = /valor|preco|price|frete|freight|taxa|usd/.test(norm);
+                                  const isContainer = /container|modalidade/.test(norm);
+                                  const isPo = /^po$/.test(norm.trim());
+                                  if (isContainer && v) {
+                                    const s = String(v);
+                                    const sLow = s.toLowerCase();
+                                    const tipo = sLow.includes("lcl") ? "LCL" : sLow.includes("aer") || sLow.includes("air") ? "Aéreo" : sLow.includes("fcl") ? "FCL" : s.replace(/\d+['"]?\s*(ft|hc)?/gi, "").trim() || s;
+                                    const size = s.match(/(\d+['"]?\s*(?:ft|hc|HC)?)/i)?.[1]?.trim() ?? "";
+                                    return (
+                                      <td key={c} className="px-3 py-2 whitespace-nowrap align-top">
+                                        <p className="font-semibold">{tipo}</p>
+                                        {size && <p className="text-muted-foreground text-[10px]">{size}</p>}
+                                      </td>
+                                    );
+                                  }
+                                  if (isValue && typeof v === "number" && v > 0) {
+                                    return (
+                                      <td key={c} className="px-3 py-2 whitespace-nowrap font-semibold text-emerald-600">
+                                        $ {v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                      </td>
+                                    );
+                                  }
+                                  if (isPo && v) {
+                                    return (
+                                      <td key={c} className="px-3 py-2 whitespace-nowrap font-semibold text-blue-500">
+                                        {String(v)}
+                                      </td>
+                                    );
+                                  }
+                                  return (
+                                    <td key={c} className="px-3 py-2 whitespace-nowrap text-foreground/80">
+                                      {String(v ?? "")}
+                                    </td>
+                                  );
+                                })}
                               </tr>
                             ))}
                           </tbody>
