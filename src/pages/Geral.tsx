@@ -45,9 +45,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 const SHIPMENT_COLORS = ["hsl(217 91% 60%)", "hsl(38 92% 50%)", "hsl(var(--muted-foreground))"];
 
 const STATUS_GROUPS = {
-  noPrazo: ["no prazo", "entregue em dia", "chegou", "ok"],
-  atrasado: ["atrasado", "entregue atrasado", "crítico", "critico", "verificar aéreo", "verificar aereo"],
-  emAndamento: ["em produção", "em producao", "em viagem", "aguardando embarque", "em desembaraço", "em desembaraco", "estoque", "em andamento"],
+  noPrazo: ["no prazo", "on time", "entregue em dia", "chegou", "ok", "dia"],
+  atrasado: ["atrasado", "entregue atrasado", "crítico", "critico", "verificar aéreo", "verificar aereo", "late"],
+  emAndamento: ["em produção", "em producao", "em viagem", "aguardando embarque", "em desembaraço", "em desembaraco", "estoque", "em andamento", "in transit"],
 };
 
 function classifyStatus(status: string | null): "noPrazo" | "atrasado" | "emAndamento" | "outro" {
@@ -147,7 +147,9 @@ const Geral = () => {
       const qCompra = Number(r.qty_compra) || 0;
       const pVenda = Number(r.preco_venda) || 0;
       const pCompra = Number(r.preco_compra) || 0;
-      acc.valorCompra += pCompra * qCompra;
+      // Fallback: usa qty_venda se qty_compra estiver vazio (caso de Tubos)
+      const qCompraEff = qCompra > 0 ? qCompra : qVenda;
+      acc.valorCompra += pCompra * qCompraEff;
       acc.valorVenda += pVenda * qVenda;
       if (r.po) acc.pos.add(r.po);
       if (r.fornecedor) acc.fornecedores.add(r.fornecedor);
@@ -159,7 +161,7 @@ const Geral = () => {
       if (monthKey) {
         if (!monthly.has(monthKey)) monthly.set(monthKey, { compras: 0, vendas: 0 });
         const m = monthly.get(monthKey)!;
-        m.compras += pCompra * qCompra;
+        m.compras += pCompra * qCompraEff;
         m.vendas += pVenda * qVenda;
       }
 

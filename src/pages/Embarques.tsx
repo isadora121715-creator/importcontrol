@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Ship,
   Package,
@@ -7,7 +7,11 @@ import {
   Calculator,
   AlertTriangle,
   Upload,
+  Pencil,
+  Trash2,
+  FileSpreadsheet,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,7 +24,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const STORAGE_FCL_KEY = "embarques.fretes_fcl.v1";
+const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v1";
 
 // ---------------------------------------------------------------------------
 // CONTAINERS
@@ -185,7 +201,9 @@ const FRETES_LCL = [
   { rota: "Miami → Porto de Santos (SP)", valor: "US$ 300-450 por m³", obs: "Importação rápida dos EUA", tempo: "8-12 dias" },
 ];
 
-const FRETES_FCL = [
+type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string };
+
+const FRETES_FCL_DEFAULT: FreteFCL[] = [
   { rota: "Shangai → Santos (FCL 20ft)", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias" },
   { rota: "Shangai → Itajaí/Navegantes (FCL 20ft)", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias" },
   { rota: "Shangai → Suape (FCL 20ft)", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias" },
@@ -193,6 +211,8 @@ const FRETES_FCL = [
   { rota: "Miami → Santos (FCL 20ft)", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias" },
   { rota: "Miami → Suape (FCL 20ft)", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias" },
 ];
+
+type FreteIntl = Record<string, string | number>;
 
 const ROTAS_AEREAS = [
   "Xangai (PVG) → São Paulo (GRU): 5-7 dias",
@@ -204,7 +224,106 @@ const ROTAS_AEREAS = [
 // COMPONENTE
 // ---------------------------------------------------------------------------
 const Embarques = () => {
+  const { toast } = useToast();
   const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
+
+  // Fretes FCL (editáveis + persistência)
+  const [fretesFcl, setFretesFcl] = useState<FreteFCL[]>(() => {
+    if (typeof window === "undefined") return FRETES_FCL_DEFAULT;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_FCL_KEY);
+      return raw ? (JSON.parse(raw) as FreteFCL[]) : FRETES_FCL_DEFAULT;
+    } catch {
+      return FRETES_FCL_DEFAULT;
+    }
+  });
+  const [editingFclIndex, setEditingFclIndex] = useState<number | null>(null);
+  const [editFclDraft, setEditFclDraft] = useState<FreteFCL | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_FCL_KEY, JSON.stringify(fretesFcl));
+    } catch {
+      /* ignore */
+    }
+  }, [fretesFcl]);
+
+  // Internacionais (planilha persistida)
+  const [intlRows, setIntlRows] = useState<FreteIntl[]>([]);
+  const [intlColumns, setIntlColumns] = useState<string[]>([]);
+  const [intlFileName, setIntlFileName] = useState<string>("");
+  const [intlUploadedAt, setIntlUploadedAt] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_INTL_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        rows: FreteIntl[];
+        columns: string[];
+        fileName: string;
+        uploadedAt: string;
+      };
+      setIntlRows(saved.rows ?? []);
+      setIntlColumns(saved.columns ?? []);
+      setIntlFileName(saved.fileName ?? "");
+      setIntlUploadedAt(saved.uploadedAt ?? "");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleIntlUpload = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json<FreteIntl>(sheet, { defval: "" });
+      const cols = json.length > 0 ? Object.keys(json[0]) : [];
+      const uploadedAt = new Date().toISOString();
+      setIntlRows(json);
+      setIntlColumns(cols);
+      setIntlFileName(file.name);
+      setIntlUploadedAt(uploadedAt);
+      window.localStorage.setItem(
+        STORAGE_INTL_KEY,
+        JSON.stringify({ rows: json, columns: cols, fileName: file.name, uploadedAt }),
+      );
+      toast({
+        title: "Planilha carregada",
+        description: `${json.length} registros importados de ${file.name}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Erro ao carregar planilha",
+        description: err instanceof Error ? err.message : "Formato inválido",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const clearIntl = () => {
+    setIntlRows([]);
+    setIntlColumns([]);
+    setIntlFileName("");
+    setIntlUploadedAt("");
+    window.localStorage.removeItem(STORAGE_INTL_KEY);
+  };
+
+  const openEditFcl = (idx: number) => {
+    setEditingFclIndex(idx);
+    setEditFclDraft({ ...fretesFcl[idx] });
+  };
+  const saveEditFcl = () => {
+    if (editingFclIndex === null || !editFclDraft) return;
+    setFretesFcl((prev) =>
+      prev.map((f, i) => (i === editingFclIndex ? editFclDraft : f)),
+    );
+    setEditingFclIndex(null);
+    setEditFclDraft(null);
+    toast({ title: "Frete atualizado" });
+  };
 
   // Simulador
   const [tipoFrete, setTipoFrete] = useState("Marítimo");
@@ -431,82 +550,87 @@ const Embarques = () => {
 
           {/* ============================== FRETES ============================== */}
           <TabsContent value="fretes" className="space-y-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Fretes LCL Aproximados</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Less than Container Load - Consolidação de carga
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {FRETES_LCL.map((f) => (
-                    <div
-                      key={f.rota}
-                      className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-semibold">{f.rota}</p>
-                        <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
-                          LCL
-                        </span>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Fretes LCL Aproximados</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Less than Container Load - Consolidação de carga
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {FRETES_LCL.map((f) => (
+                      <div
+                        key={f.rota}
+                        className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold">{f.rota}</p>
+                          <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                            LCL
+                          </span>
+                        </div>
+                        <p className="text-base font-bold text-primary">{f.valor}</p>
+                        <p className="text-xs text-muted-foreground">{f.obs}</p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="font-medium">Tempo:</span>
+                          <span>{f.tempo}</span>
+                        </div>
                       </div>
-                      <p className="text-base font-bold text-primary">{f.valor}</p>
-                      <p className="text-xs text-muted-foreground">{f.obs}</p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span className="font-medium">Tempo:</span>
-                        <span>{f.tempo}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Fretes FCL Aproximados</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Full Container Load - Container completo
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {["20ft", "40ft", "45ft HC"].map((b) => (
-                    <span
-                      key={b}
-                      className="text-xs font-semibold bg-muted px-3 py-1 rounded-full"
-                    >
-                      {b}
-                    </span>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {FRETES_FCL.map((f) => (
-                    <div
-                      key={f.rota}
-                      className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-semibold">{f.rota}</p>
-                        <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
-                          FCL
-                        </span>
-                      </div>
-                      <p className="text-base font-bold text-primary">{f.valor}</p>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span className="font-medium">Capacidade:</span>
-                        <span>{f.capacidade}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span className="font-medium">Tempo:</span>
-                        <span>{f.tempo}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Fretes FCL Aproximados</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Full Container Load - Clique em um cartão para editar
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {["20ft", "40ft", "45ft HC"].map((b) => (
+                      <span
+                        key={b}
+                        className="text-xs font-semibold bg-muted px-3 py-1 rounded-full"
+                      >
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {fretesFcl.map((f, idx) => (
+                      <button
+                        type="button"
+                        key={`${f.rota}-${idx}`}
+                        onClick={() => openEditFcl(idx)}
+                        className="text-left rounded-lg border p-4 space-y-2 hover:shadow-sm hover:border-primary transition-all group relative"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold">{f.rota}</p>
+                          <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                            FCL
+                          </span>
+                        </div>
+                        <p className="text-base font-bold text-primary">{f.valor}</p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="font-medium">Capacidade:</span>
+                          <span>{f.capacidade}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="font-medium">Tempo:</span>
+                          <span>{f.tempo}</span>
+                        </div>
+                        <Pencil className="absolute top-2 right-2 h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             <Card>
               <CardHeader>
@@ -562,40 +686,94 @@ const Embarques = () => {
                   <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      Carregar Planilha de Fretes
+                      {intlRows.length > 0
+                        ? "Atualizar planilha (substituirá os dados atuais)"
+                        : "Carregar Planilha de Fretes"}
                     </span>
-                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" />
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleIntlUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
                   </label>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Colunas suportadas: Região, Valor, Prazo, Agente, Peso
-                    Mín/Máx, Tipo Container, Quantidade, PO, Exportador, Tipo
-                    Agente, Peso KG, Data
+                    A primeira linha da planilha deve conter os nomes das
+                    colunas. Os dados ficam salvos no navegador e só são
+                    atualizados ao carregar uma nova planilha.
                   </p>
                 </div>
 
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <h4 className="text-sm font-semibold mb-1">
-                    Nenhuma planilha carregada
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Os fretes nacionais de HCI serão exibidos aqui após o
-                    carregamento da planilha de cotações.
-                  </p>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <h4 className="text-sm font-semibold mb-2">
-                    Esperadas Informações:
-                  </h4>
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    <li>• Regiões de entrega</li>
-                    <li>• Valores por região</li>
-                    <li>• Tempo de entrega</li>
-                    <li>• Peso mínimo e máximo</li>
-                    <li>• Agentes/Transportadoras</li>
-                    <li>• Tipos de container</li>
-                  </ul>
-                </div>
+                {intlRows.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+                      <div className="flex items-center gap-2 text-sm">
+                        <FileSpreadsheet className="h-4 w-4 text-primary" />
+                        <span className="font-semibold">{intlFileName}</span>
+                        <span className="text-muted-foreground">
+                          · {intlRows.length} registros
+                        </span>
+                        {intlUploadedAt && (
+                          <span className="text-xs text-muted-foreground">
+                            · {new Date(intlUploadedAt).toLocaleString("pt-BR")}
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearIntl}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" /> Limpar
+                      </Button>
+                    </div>
+                    <div className="overflow-auto rounded-lg border max-h-[500px]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr>
+                            {intlColumns.map((c) => (
+                              <th
+                                key={c}
+                                className="text-left px-3 py-2 font-semibold whitespace-nowrap"
+                              >
+                                {c}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {intlRows.map((row, i) => (
+                            <tr key={i} className="border-t hover:bg-muted/30">
+                              {intlColumns.map((c) => (
+                                <td
+                                  key={c}
+                                  className="px-3 py-2 whitespace-nowrap"
+                                >
+                                  {String(row[c] ?? "")}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <h4 className="text-sm font-semibold mb-1">
+                      Nenhuma planilha carregada
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Os fretes serão exibidos aqui após o carregamento da
+                      planilha. Os dados ficarão salvos automaticamente.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -805,6 +983,82 @@ const Embarques = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Dialog de edição de Frete FCL */}
+      <Dialog
+        open={editingFclIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingFclIndex(null);
+            setEditFclDraft(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Frete FCL</DialogTitle>
+          </DialogHeader>
+          {editFclDraft && (
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="fcl-rota">Rota</Label>
+                <Input
+                  id="fcl-rota"
+                  value={editFclDraft.rota}
+                  onChange={(e) =>
+                    setEditFclDraft({ ...editFclDraft, rota: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="fcl-valor">Valor</Label>
+                <Input
+                  id="fcl-valor"
+                  value={editFclDraft.valor}
+                  onChange={(e) =>
+                    setEditFclDraft({ ...editFclDraft, valor: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="fcl-cap">Capacidade</Label>
+                <Input
+                  id="fcl-cap"
+                  value={editFclDraft.capacidade}
+                  onChange={(e) =>
+                    setEditFclDraft({
+                      ...editFclDraft,
+                      capacidade: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="fcl-tempo">Tempo</Label>
+                <Input
+                  id="fcl-tempo"
+                  value={editFclDraft.tempo}
+                  onChange={(e) =>
+                    setEditFclDraft({ ...editFclDraft, tempo: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingFclIndex(null);
+                setEditFclDraft(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={saveEditFcl}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
