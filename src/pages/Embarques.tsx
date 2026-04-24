@@ -224,7 +224,106 @@ const ROTAS_AEREAS = [
 // COMPONENTE
 // ---------------------------------------------------------------------------
 const Embarques = () => {
+  const { toast } = useToast();
   const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
+
+  // Fretes FCL (editáveis + persistência)
+  const [fretesFcl, setFretesFcl] = useState<FreteFCL[]>(() => {
+    if (typeof window === "undefined") return FRETES_FCL_DEFAULT;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_FCL_KEY);
+      return raw ? (JSON.parse(raw) as FreteFCL[]) : FRETES_FCL_DEFAULT;
+    } catch {
+      return FRETES_FCL_DEFAULT;
+    }
+  });
+  const [editingFclIndex, setEditingFclIndex] = useState<number | null>(null);
+  const [editFclDraft, setEditFclDraft] = useState<FreteFCL | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_FCL_KEY, JSON.stringify(fretesFcl));
+    } catch {
+      /* ignore */
+    }
+  }, [fretesFcl]);
+
+  // Internacionais (planilha persistida)
+  const [intlRows, setIntlRows] = useState<FreteIntl[]>([]);
+  const [intlColumns, setIntlColumns] = useState<string[]>([]);
+  const [intlFileName, setIntlFileName] = useState<string>("");
+  const [intlUploadedAt, setIntlUploadedAt] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_INTL_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        rows: FreteIntl[];
+        columns: string[];
+        fileName: string;
+        uploadedAt: string;
+      };
+      setIntlRows(saved.rows ?? []);
+      setIntlColumns(saved.columns ?? []);
+      setIntlFileName(saved.fileName ?? "");
+      setIntlUploadedAt(saved.uploadedAt ?? "");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleIntlUpload = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json<FreteIntl>(sheet, { defval: "" });
+      const cols = json.length > 0 ? Object.keys(json[0]) : [];
+      const uploadedAt = new Date().toISOString();
+      setIntlRows(json);
+      setIntlColumns(cols);
+      setIntlFileName(file.name);
+      setIntlUploadedAt(uploadedAt);
+      window.localStorage.setItem(
+        STORAGE_INTL_KEY,
+        JSON.stringify({ rows: json, columns: cols, fileName: file.name, uploadedAt }),
+      );
+      toast({
+        title: "Planilha carregada",
+        description: `${json.length} registros importados de ${file.name}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Erro ao carregar planilha",
+        description: err instanceof Error ? err.message : "Formato inválido",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const clearIntl = () => {
+    setIntlRows([]);
+    setIntlColumns([]);
+    setIntlFileName("");
+    setIntlUploadedAt("");
+    window.localStorage.removeItem(STORAGE_INTL_KEY);
+  };
+
+  const openEditFcl = (idx: number) => {
+    setEditingFclIndex(idx);
+    setEditFclDraft({ ...fretesFcl[idx] });
+  };
+  const saveEditFcl = () => {
+    if (editingFclIndex === null || !editFclDraft) return;
+    setFretesFcl((prev) =>
+      prev.map((f, i) => (i === editingFclIndex ? editFclDraft : f)),
+    );
+    setEditingFclIndex(null);
+    setEditFclDraft(null);
+    toast({ title: "Frete atualizado" });
+  };
 
   // Simulador
   const [tipoFrete, setTipoFrete] = useState("Marítimo");
