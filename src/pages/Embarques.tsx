@@ -7,9 +7,9 @@ import {
   Calculator,
   AlertTriangle,
   Upload,
-  Pencil,
   Trash2,
   FileSpreadsheet,
+  CheckCircle2,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { HeaderTabs } from "@/components/HeaderTabs";
@@ -24,14 +24,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
