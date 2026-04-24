@@ -686,40 +686,94 @@ const Embarques = () => {
                   <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
                     <Upload className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      Carregar Planilha de Fretes
+                      {intlRows.length > 0
+                        ? "Atualizar planilha (substituirá os dados atuais)"
+                        : "Carregar Planilha de Fretes"}
                     </span>
-                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" />
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleIntlUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
                   </label>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Colunas suportadas: Região, Valor, Prazo, Agente, Peso
-                    Mín/Máx, Tipo Container, Quantidade, PO, Exportador, Tipo
-                    Agente, Peso KG, Data
+                    A primeira linha da planilha deve conter os nomes das
+                    colunas. Os dados ficam salvos no navegador e só são
+                    atualizados ao carregar uma nova planilha.
                   </p>
                 </div>
 
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <h4 className="text-sm font-semibold mb-1">
-                    Nenhuma planilha carregada
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Os fretes nacionais de HCI serão exibidos aqui após o
-                    carregamento da planilha de cotações.
-                  </p>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <h4 className="text-sm font-semibold mb-2">
-                    Esperadas Informações:
-                  </h4>
-                  <ul className="space-y-1 text-sm text-muted-foreground">
-                    <li>• Regiões de entrega</li>
-                    <li>• Valores por região</li>
-                    <li>• Tempo de entrega</li>
-                    <li>• Peso mínimo e máximo</li>
-                    <li>• Agentes/Transportadoras</li>
-                    <li>• Tipos de container</li>
-                  </ul>
-                </div>
+                {intlRows.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+                      <div className="flex items-center gap-2 text-sm">
+                        <FileSpreadsheet className="h-4 w-4 text-primary" />
+                        <span className="font-semibold">{intlFileName}</span>
+                        <span className="text-muted-foreground">
+                          · {intlRows.length} registros
+                        </span>
+                        {intlUploadedAt && (
+                          <span className="text-xs text-muted-foreground">
+                            · {new Date(intlUploadedAt).toLocaleString("pt-BR")}
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearIntl}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" /> Limpar
+                      </Button>
+                    </div>
+                    <div className="overflow-auto rounded-lg border max-h-[500px]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr>
+                            {intlColumns.map((c) => (
+                              <th
+                                key={c}
+                                className="text-left px-3 py-2 font-semibold whitespace-nowrap"
+                              >
+                                {c}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {intlRows.map((row, i) => (
+                            <tr key={i} className="border-t hover:bg-muted/30">
+                              {intlColumns.map((c) => (
+                                <td
+                                  key={c}
+                                  className="px-3 py-2 whitespace-nowrap"
+                                >
+                                  {String(row[c] ?? "")}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <h4 className="text-sm font-semibold mb-1">
+                      Nenhuma planilha carregada
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Os fretes serão exibidos aqui após o carregamento da
+                      planilha. Os dados ficarão salvos automaticamente.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
