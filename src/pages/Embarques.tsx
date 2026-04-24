@@ -450,6 +450,7 @@ const Embarques = () => {
     if (v >= 1_000) return `~${(v / 1_000).toFixed(1)}k kg`;
     return `~${v.toFixed(0)} kg`;
   };
+  const monthLabelKey = (key: string) => key;
 
 
   // Simulador
