@@ -240,26 +240,13 @@ const Embarques = () => {
   const { toast } = useToast();
   const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
 
-  // Fretes FCL (editáveis + persistência)
-  const [fretesFcl, setFretesFcl] = useState<FreteFCL[]>(() => {
-    if (typeof window === "undefined") return FRETES_FCL_DEFAULT;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_FCL_KEY);
-      return raw ? (JSON.parse(raw) as FreteFCL[]) : FRETES_FCL_DEFAULT;
-    } catch {
-      return FRETES_FCL_DEFAULT;
-    }
-  });
-  const [editingFclIndex, setEditingFclIndex] = useState<number | null>(null);
-  const [editFclDraft, setEditFclDraft] = useState<FreteFCL | null>(null);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_FCL_KEY, JSON.stringify(fretesFcl));
-    } catch {
-      /* ignore */
-    }
-  }, [fretesFcl]);
+  // Fretes FCL — agora apenas exibição filtrada por tipo de container
+  const [fretesFcl] = useState<FreteFCL[]>(FRETES_FCL_DEFAULT);
+  const [selectedFclTipo, setSelectedFclTipo] = useState<"20ft" | "40ft" | "45ft HC">("20ft");
+  const fretesFclFiltrados = useMemo(
+    () => fretesFcl.filter((f) => f.tipo === selectedFclTipo),
+    [fretesFcl, selectedFclTipo],
+  );
 
   // Internacionais (planilha persistida)
   const [intlRows, setIntlRows] = useState<FreteIntl[]>([]);
