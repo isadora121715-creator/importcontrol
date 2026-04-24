@@ -303,6 +303,153 @@ const Embarques = () => {
     window.localStorage.removeItem(STORAGE_INTL_KEY);
   };
 
+  // ---- Filtros e estatísticas para Internacionais ----
+  const [intlFilterTipo, setIntlFilterTipo] = useState<string>("Todos");
+  const [intlFilterPO, setIntlFilterPO] = useState<string>("");
+  const [intlFilterExp, setIntlFilterExp] = useState<string>("Todos");
+  const [intlFilterAgente, setIntlFilterAgente] = useState<string>("Todos");
+
+  const intlField = useMemo(() => {
+    const norm = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+    const find = (...needles: string[]) =>
+      intlColumns.find((c) => needles.some((n) => norm(c).includes(n))) ?? null;
+    return {
+      po: find("po"),
+      exportador: find("exportador", "shipper", "fornecedor"),
+      agente: find("agente", "agent"),
+      container: find("container", "modalidade", "tipo"),
+      qtdContainer: find("qtd cont", "qty cont", "quantidade cont"),
+      peso: find("peso", "kg", "weight"),
+      valor: find("valor", "preco", "price", "frete", "freight", "taxa"),
+      mes: find("mes", "month", "data", "date"),
+      praco: find("praco", "prazo", "lead"),
+    };
+  }, [intlColumns]);
+
+  const detectQty = (v: unknown): number => {
+    if (typeof v === "number") return v;
+    if (!v) return 0;
+    const n = Number(String(v).replace(/[^\d.,-]/g, "").replace(",", "."));
+    return isNaN(n) ? 0 : n;
+  };
+
+  const detectMonth = (v: unknown): string | null => {
+    if (!v) return null;
+    if (typeof v === "number") {
+      const utcDays = Math.floor(v - 25569);
+      const date = new Date(utcDays * 86400000);
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    }
+    const s = String(v).trim();
+    const br = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (br) {
+      const y = br[3].length === 2 ? `20${br[3]}` : br[3];
+      return `${y}-${br[2].padStart(2, "0")}`;
+    }
+    const iso = s.match(/^(\d{4})-(\d{1,2})/);
+    if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}`;
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return null;
+  };
+
+  const intlStats = useMemo(() => {
+    const rows = intlRows;
+    const containers = { "20ft": 0, "40ft": 0, "45ft": 0 };
+    const modalidades = { LCL: 0, FCL: 0, Aereo: 0 };
+    const exportadores = new Set<string>();
+    const agentes = new Set<string>();
+    const meses = new Set<string>();
+    let pesoTotal = 0;
+    let valorTotal = 0;
+    const monthMap = new Map<string, { containers: number; peso: number }>();
+
+    rows.forEach((r) => {
+      const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
+      const qtd = intlField.qtdContainer ? detectQty(r[intlField.qtdContainer]) || 1 : 1;
+      if (cont.includes("20")) containers["20ft"] += qtd;
+      else if (cont.includes("45")) containers["45ft"] += qtd;
+      else if (cont.includes("40")) containers["40ft"] += qtd;
+
+      if (cont.includes("lcl")) modalidades.LCL += 1;
+      else if (cont.includes("aer") || cont.includes("air")) modalidades.Aereo += 1;
+      else if (cont.includes("fcl") || cont.includes("20") || cont.includes("40") || cont.includes("45")) modalidades.FCL += 1;
+
+      if (intlField.exportador && r[intlField.exportador]) exportadores.add(String(r[intlField.exportador]));
+      if (intlField.agente && r[intlField.agente]) agentes.add(String(r[intlField.agente]));
+
+      if (intlField.peso) pesoTotal += detectQty(r[intlField.peso]);
+      if (intlField.valor) valorTotal += detectQty(r[intlField.valor]);
+
+      if (intlField.mes) {
+        const mk = detectMonth(r[intlField.mes]);
+        if (mk) {
+          meses.add(mk);
+          if (!monthMap.has(mk)) monthMap.set(mk, { containers: 0, peso: 0 });
+          const m = monthMap.get(mk)!;
+          m.containers += qtd;
+          m.peso += intlField.peso ? detectQty(r[intlField.peso]) : 0;
+        }
+      }
+    });
+
+    const totalContainers = containers["20ft"] + containers["40ft"] + containers["45ft"];
+    const monthsList = Array.from(meses).sort();
+    const mediaContainers = monthsList.length > 0 ? totalContainers / monthsList.length : 0;
+    const mediaKgMes = monthsList.length > 0 ? pesoTotal / monthsList.length : 0;
+    const detalhesPorMes = monthsList.map((mk) => ({
+      mes: mk,
+      containers: monthMap.get(mk)?.containers ?? 0,
+      peso: monthMap.get(mk)?.peso ?? 0,
+    }));
+
+    return {
+      containers,
+      modalidades,
+      exportadores: Array.from(exportadores).sort(),
+      agentes: Array.from(agentes).sort(),
+      meses: monthsList,
+      pesoTotal,
+      valorTotal,
+      totalContainers,
+      mediaContainers,
+      mediaKgMes,
+      detalhesPorMes,
+    };
+  }, [intlRows, intlField]);
+
+  const intlRowsFiltradas = useMemo(() => {
+    return intlRows.filter((r) => {
+      if (intlFilterTipo !== "Todos" && intlField.container) {
+        const cont = String(r[intlField.container] ?? "").toLowerCase();
+        if (!cont.includes(intlFilterTipo.toLowerCase())) return false;
+      }
+      if (intlFilterPO && intlField.po) {
+        const po = String(r[intlField.po] ?? "").toLowerCase();
+        if (!po.includes(intlFilterPO.toLowerCase())) return false;
+      }
+      if (intlFilterExp !== "Todos" && intlField.exportador) {
+        if (String(r[intlField.exportador] ?? "") !== intlFilterExp) return false;
+      }
+      if (intlFilterAgente !== "Todos" && intlField.agente) {
+        if (String(r[intlField.agente] ?? "") !== intlFilterAgente) return false;
+      }
+      return true;
+    });
+  }, [intlRows, intlField, intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente]);
+
+  const formatBRLIntl = (v: number) =>
+    `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatPesoApprox = (v: number) => {
+    if (v >= 1_000_000) return `~${(v / 1_000_000).toFixed(1)}M kg`;
+    if (v >= 1_000) return `~${(v / 1_000).toFixed(1)}k kg`;
+    return `~${v.toFixed(0)} kg`;
+  };
 
 
   // Simulador
