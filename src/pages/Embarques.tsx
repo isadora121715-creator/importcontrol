@@ -245,6 +245,13 @@ const Embarques = () => {
   const [intlColumns, setIntlColumns] = useState<string[]>([]);
   const [intlFileName, setIntlFileName] = useState<string>("");
   const [intlUploadedAt, setIntlUploadedAt] = useState<string>("");
+  // Totais lidos diretamente da planilha (linha de totais 365 e contagem aérea)
+  const [intlTotals, setIntlTotals] = useState<{
+    cont20: number;
+    cont40: number;
+    cont45: number;
+    aereo: number;
+  }>({ cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -256,11 +263,13 @@ const Embarques = () => {
         columns: string[];
         fileName: string;
         uploadedAt: string;
+        totals?: { cont20: number; cont40: number; cont45: number; aereo: number };
       };
       setIntlRows(saved.rows ?? []);
       setIntlColumns(saved.columns ?? []);
       setIntlFileName(saved.fileName ?? "");
       setIntlUploadedAt(saved.uploadedAt ?? "");
+      if (saved.totals) setIntlTotals(saved.totals);
     } catch {
       /* ignore */
     }
@@ -271,20 +280,85 @@ const Embarques = () => {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<FreteIntl>(sheet, { defval: "" });
-      const cols = json.length > 0 ? Object.keys(json[0]) : [];
+
+      // Lê tudo como matriz para acessar células fixas (subcabeçalho + linha de totais)
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: "",
+        blankrows: false,
+      });
+      if (matrix.length < 2) throw new Error("Planilha vazia ou sem cabeçalho");
+
+      const headers = (matrix[0] as unknown[]).map((h, i) =>
+        h ? String(h).trim() : `Col${i + 1}`,
+      );
+
+      // Identifica a linha de totais (linha 365 da planilha = índice 364).
+      // Como filtramos blankrows, procuramos a primeira linha cujo D == "-" e G/H/I numéricos.
+      const totalsIdx = matrix.findIndex((row, idx) => {
+        if (idx === 0) return false;
+        const r = row as unknown[];
+        const d = r[3];
+        const g = Number(r[6]);
+        const h = Number(r[7]);
+        const i = Number(r[8]);
+        return d === "-" && (!isNaN(g) || !isNaN(h) || !isNaN(i)) && (g + h + i) > 0;
+      });
+
+      let cont20 = 0, cont40 = 0, cont45 = 0;
+      if (totalsIdx > 0) {
+        const r = matrix[totalsIdx] as unknown[];
+        cont20 = Number(r[6]) || 0;
+        cont40 = Number(r[7]) || 0;
+        cont45 = Number(r[8]) || 0;
+      }
+
+      // Coluna E (índice 4) = MODALIDADE — conta pedidos aéreos, ignorando totais
+      let aereo = 0;
+      const dataRows: FreteIntl[] = [];
+      matrix.forEach((row, idx) => {
+        if (idx === 0) return; // header
+        if (idx === totalsIdx) return; // pular linha de totais
+        const r = row as unknown[];
+        // Linha do subcabeçalho ("20'", "40'"...) — pular
+        const isSubHeader =
+          r[6] === "20'" || r[6] === '20"' || (typeof r[6] === "string" && /^20['"]/.test(String(r[6])));
+        if (isSubHeader) return;
+        // Linha vazia significativa
+        const hasData = r.some((v) => v !== "" && v !== null && v !== undefined);
+        if (!hasData) return;
+
+        const mod = String(r[4] ?? "").trim().toUpperCase();
+        if (mod === "AÉREO" || mod === "AEREO" || mod === "AIR") aereo += 1;
+
+        const obj: FreteIntl = {};
+        headers.forEach((h, i) => {
+          const v = r[i];
+          if (v !== undefined && v !== null && v !== "") obj[h] = v as string | number;
+        });
+        if (Object.keys(obj).length > 0) dataRows.push(obj);
+      });
+
+      const totals = { cont20, cont40, cont45, aereo };
       const uploadedAt = new Date().toISOString();
-      setIntlRows(json);
-      setIntlColumns(cols);
+      setIntlRows(dataRows);
+      setIntlColumns(headers);
       setIntlFileName(file.name);
       setIntlUploadedAt(uploadedAt);
+      setIntlTotals(totals);
       window.localStorage.setItem(
         STORAGE_INTL_KEY,
-        JSON.stringify({ rows: json, columns: cols, fileName: file.name, uploadedAt }),
+        JSON.stringify({
+          rows: dataRows,
+          columns: headers,
+          fileName: file.name,
+          uploadedAt,
+          totals,
+        }),
       );
       toast({
         title: "Planilha carregada",
-        description: `${json.length} registros importados de ${file.name}.`,
+        description: `${dataRows.length} registros importados de ${file.name}.`,
       });
     } catch (err) {
       toast({
@@ -300,6 +374,7 @@ const Embarques = () => {
     setIntlColumns([]);
     setIntlFileName("");
     setIntlUploadedAt("");
+    setIntlTotals({ cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
     window.localStorage.removeItem(STORAGE_INTL_KEY);
   };
 
