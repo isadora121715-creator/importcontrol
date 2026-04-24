@@ -311,19 +311,7 @@ const Embarques = () => {
     window.localStorage.removeItem(STORAGE_INTL_KEY);
   };
 
-  const openEditFcl = (idx: number) => {
-    setEditingFclIndex(idx);
-    setEditFclDraft({ ...fretesFcl[idx] });
-  };
-  const saveEditFcl = () => {
-    if (editingFclIndex === null || !editFclDraft) return;
-    setFretesFcl((prev) =>
-      prev.map((f, i) => (i === editingFclIndex ? editFclDraft : f)),
-    );
-    setEditingFclIndex(null);
-    setEditFclDraft(null);
-    toast({ title: "Frete atualizado" });
-  };
+
 
   // Simulador
   const [tipoFrete, setTipoFrete] = useState("Marítimo");
