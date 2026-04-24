@@ -119,6 +119,8 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
   return all;
 }
 
+type ReportDimension = "mes" | "fornecedor" | "cliente" | "po";
+
 const Geral = () => {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["pedidos-geral-summary"],
@@ -126,6 +128,81 @@ const Geral = () => {
     staleTime: 60_000,
     gcTime: 30 * 60_000,
   });
+
+  const [reportDim, setReportDim] = useState<ReportDimension>("mes");
+
+  const report = useMemo(() => {
+    const rows = data ?? [];
+    const map = new Map<string, { registros: number; pos: Set<string>; valorCompra: number; valorVenda: number }>();
+
+    rows.forEach((r) => {
+      let key: string | null = null;
+      if (reportDim === "mes") {
+        key = parseMonthKey(r.emissao_pedido_sistema) ?? parseMonthKey(r.prazo_cliente);
+      } else if (reportDim === "fornecedor") {
+        key = r.fornecedor;
+      } else if (reportDim === "cliente") {
+        key = r.cliente;
+      } else if (reportDim === "po") {
+        key = r.po;
+      }
+      if (!key) return;
+      if (!map.has(key)) map.set(key, { registros: 0, pos: new Set(), valorCompra: 0, valorVenda: 0 });
+      const acc = map.get(key)!;
+      acc.registros += 1;
+      if (r.po) acc.pos.add(r.po);
+      const qVenda = Number(r.qty_venda) || 0;
+      const qCompra = Number(r.qty_compra) || 0;
+      const pVenda = Number(r.preco_venda) || 0;
+      const pCompra = Number(r.preco_compra) || 0;
+      const qCompraEff = qCompra > 0 ? qCompra : qVenda;
+      acc.valorCompra += pCompra * qCompraEff;
+      acc.valorVenda += pVenda * qVenda;
+    });
+
+    return Array.from(map.entries())
+      .map(([key, v]) => ({
+        chave: reportDim === "mes" ? monthLabel(key) : key,
+        rawKey: key,
+        registros: v.registros,
+        pos: v.pos.size,
+        valorCompra: v.valorCompra,
+        valorVenda: v.valorVenda,
+      }))
+      .sort((a, b) => {
+        if (reportDim === "mes") return a.rawKey.localeCompare(b.rawKey);
+        return b.valorCompra - a.valorCompra;
+      });
+  }, [data, reportDim]);
+
+  const downloadReportCsv = () => {
+    const headers = [
+      reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO",
+      "Registros",
+      "POs Únicas",
+      "Valor de Compra (R$)",
+      "Valor de Venda (R$)",
+    ];
+    const csv = [
+      headers.join(";"),
+      ...report.map((r) =>
+        [
+          `"${(r.chave ?? "").toString().replace(/"/g, '""')}"`,
+          r.registros,
+          r.pos,
+          r.valorCompra.toFixed(2).replace(".", ","),
+          r.valorVenda.toFixed(2).replace(".", ","),
+        ].join(";"),
+      ),
+    ].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `relatorio-${reportDim}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const stats = useMemo(() => {
     const rows = data ?? [];
