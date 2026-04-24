@@ -101,7 +101,7 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("pedidos")
-      .select("categoria,status_fornecedor,status_compra_venda,fornecedor,preco_venda,preco_compra,qty_venda,qty_compra,po,embarque,prazo_cliente,emissao_pedido_sistema")
+      .select("categoria,status_fornecedor,status_compra_venda,fornecedor,cliente,preco_venda,preco_compra,qty_venda,qty_compra,po,embarque,prazo_cliente,emissao_pedido_sistema")
       .range(from, from + pageSize - 1);
     if (error) throw new Error("Erro ao carregar dados consolidados.");
     if (!data || data.length === 0) break;
