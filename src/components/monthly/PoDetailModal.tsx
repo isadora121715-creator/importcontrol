@@ -83,7 +83,7 @@ export function PoDetailModal({ po, data, onClose }: Props) {
 
     const chegadaRaw = items.find((d) => parseDate(d.chegadaHci))?.chegadaHci || null;
     const chegadaDate = parseDate(chegadaRaw);
-    const onTime = chegadaDate && menorPrazoDate ? chegadaDate <= menorPrazoDate : null;
+    const onTime = chegadaDate && menorPrazoDate ? chegadaDate <= (menorPrazoDate as Date) : null;
 
     return {
       fornecedor,

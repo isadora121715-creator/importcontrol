@@ -150,17 +150,15 @@ export function parseExcelValvulas(file: File): Promise<PedidoRow[]> {
             if (hdrIdx >= headers.length) continue;
 
             const norm = normalize(headers[hdrIdx]);
-            let field = VALVE_COL_MAP[norm];
+            let field: keyof PedidoRow | undefined = VALVE_COL_MAP[norm];
 
             // Handle duplicate/position-specific column names
             if (norm === "qty") {
-              // QTY in PEDIDO DE VENDA section (column index 5) = qtyVenda
-              // QTY in PEDIDO DE COMPRA section (column index 21) = qtyCompra
-              field = (hdrIdx === 5 ? "qtyVenda" : hdrIdx === 21 ? "qtyCompra" : undefined) as keyof PedidoRow | undefined;
+              field = hdrIdx === 5 ? "qtyVenda" : hdrIdx === 21 ? "qtyCompra" : undefined;
             } else if (norm === "item") {
-              field = (hdrIdx === 1 ? "item" : undefined) as keyof PedidoRow | undefined;
+              field = hdrIdx === 1 ? "item" : undefined;
             } else if (norm === "codigo") {
-              field = (hdrIdx === 3 ? "codigo" : undefined) as keyof PedidoRow | undefined;
+              field = hdrIdx === 3 ? "codigo" : undefined;
             }
 
             if (field) {
