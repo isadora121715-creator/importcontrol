@@ -1,7 +1,15 @@
-import { useState } from "react";
-import { Ship, Package, Truck, Globe, Calculator, AlertTriangle } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Ship,
+  Package,
+  Truck,
+  DollarSign,
+  Calculator,
+  AlertTriangle,
+  Upload,
+} from "lucide-react";
 import { HeaderTabs } from "@/components/HeaderTabs";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,302 +22,785 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+// ---------------------------------------------------------------------------
+// CONTAINERS
+// ---------------------------------------------------------------------------
 type ContainerInfo = {
+  id: string;
   nome: string;
-  cap: string;
-  peso: string;
+  descricao: string;
+  tipo: string;
+  dimensoes: string;
+  capacidade: string;
+  pesoMax: string;
   tempo: string;
   valor: string;
 };
 
 const CONTAINERS: ContainerInfo[] = [
-  { nome: "20ft FCL", cap: "33m³", peso: "18t", tempo: "40-50 dias", valor: "US$ 1.200-1.800" },
-  { nome: "40ft FCL", cap: "67m³", peso: "28t", tempo: "40-50 dias", valor: "US$ 2.000-3.000" },
-  { nome: "45ft HC", cap: "76m³", peso: "30t", tempo: "40-50 dias", valor: "US$ 2.500-3.500" },
-  { nome: "LCL", cap: "até 25m³", peso: "15t", tempo: "35-45 dias", valor: "US$ 400-600/m³" },
-  { nome: "Aéreo", cap: "variável", peso: "variável", tempo: "5-10 dias", valor: "US$ 3.5-8/kg" },
+  {
+    id: "20ft",
+    nome: "Container 20ft FCL",
+    descricao: "Full Container Load - Ideal para médios volumes",
+    tipo: "FCL",
+    dimensoes: "5,90m x 2,35m x 2,38m",
+    capacidade: "33 m³",
+    pesoMax: "18 toneladas",
+    tempo: "40-50 dias",
+    valor: "US$ 1.200 - US$ 1.800",
+  },
+  {
+    id: "40ft",
+    nome: "Container 40ft FCL",
+    descricao: "Full Container Load - Capacidade padrão",
+    tipo: "FCL",
+    dimensoes: "12,19m x 2,35m x 2,38m",
+    capacidade: "67 m³",
+    pesoMax: "28 toneladas",
+    tempo: "40-50 dias",
+    valor: "US$ 2.000 - US$ 3.000",
+  },
+  {
+    id: "45ft",
+    nome: "Container 45ft High Cube",
+    descricao: "Full Container Load High Cube - Máxima capacidade com altura extra",
+    tipo: "FCL",
+    dimensoes: "13,71m x 2,35m x 2,70m",
+    capacidade: "76 m³",
+    pesoMax: "30 toneladas",
+    tempo: "40-50 dias",
+    valor: "US$ 2.500 - US$ 3.500",
+  },
+  {
+    id: "lcl",
+    nome: "LCL (Less than Container Load)",
+    descricao: "Consolidação de carga - Compartilhado com outros clientes",
+    tipo: "LCL",
+    dimensoes: "Variável",
+    capacidade: "Até 18-25 m³",
+    pesoMax: "Até 15 toneladas",
+    tempo: "35-45 dias",
+    valor: "US$ 400 - US$ 600 / m³",
+  },
+  {
+    id: "aereo",
+    nome: "Transporte Aéreo",
+    descricao: "Express - Entrega rápida, maior custo",
+    tipo: "Aéreo",
+    dimensoes: "Variável",
+    capacidade: "Conforme necessário",
+    pesoMax: "Conforme necessário",
+    tempo: "5-10 dias",
+    valor: "US$ 3.50 - US$ 8.00 / kg",
+  },
 ];
 
+// ---------------------------------------------------------------------------
+// EMBALAGEM
+// ---------------------------------------------------------------------------
+const EMBALAGEM_GROUPS = [
+  {
+    titulo: "Embalagem de Tubos",
+    instrucoes: [
+      "Empacotar tubos em caixas de madeira resistente",
+      "Agrupar tubos por diâmetro e comprimento dentro das caixas",
+      "Preencher espaços vazios com papel kraft ou espuma",
+      "Fixar as caixas de madeira com cintas de aço ou poliéster de 2 polegadas",
+      "Identificar claramente cada caixa com código de rastreamento",
+      "Máximo peso por caixa: 1.000 kg",
+      "Colocar as caixas em paletes de madeira resistente (EUR-pallete)",
+      "Proteger cantos com cantoneiras de papelão",
+    ],
+    cuidados: [
+      "Evitar umidade durante o transporte",
+      "Proteger contra danos mecânicos",
+      "Caixas de madeira devem estar bem fechadas",
+      "Utilizar dessecantes nos containers",
+    ],
+  },
+  {
+    titulo: "Embalagem de Válvulas",
+    instrucoes: [
+      "Empacotar válvulas individuais em caixas de papelão resistente",
+      "Utilizar papel kraft ou espuma como material de amortecimento",
+      "Colocar dessecantes dentro de cada caixa",
+      "Agrupar caixas em paletes com no máximo 800 kg",
+      "Envolver palet com filme plástico",
+      "Fixar com fitas de poliéster",
+      "Identificar o tipo de válvula na embalagem",
+      "Indicar orientação correta ('THIS SIDE UP')",
+    ],
+    cuidados: [
+      "Válvulas frágeis - manipular com cuidado",
+      "Manter temperatura controlada",
+      "Proteger de umidade e corrosão",
+      "Verificar vedações antes do embarque",
+    ],
+  },
+  {
+    titulo: "Embalagem de Conexões",
+    instrucoes: [
+      "Empacotar conexões em caixas de madeira ou papelão resistente",
+      "Separar por tamanho e tipo de conexão",
+      "Usar papel bolha ou espuma para proteção",
+      "Máximo 500 kg por caixa",
+      "Agrupar caixas em paletes (máximo 800 kg)",
+      "Utilizar paletes de madeira clara (não reciclada)",
+      "Envolver com filme stretch resistente",
+      "Fixar com cintas de poliéster duplas",
+    ],
+    cuidados: [
+      "Proteger contra impactos durante o transporte",
+      "Verificar acabamentos antes de empacotar",
+      "Evitar pressão excessiva nas caixas",
+      "Manter registro de quantidade por palet",
+    ],
+  },
+];
+
+const RECOMENDACOES_LCL = [
+  {
+    label: "Para Tubos em LCL:",
+    text: "Empacotar em caixas de madeira resistente. Os tubos devem ser agrupados por diâmetro e comprimento. Máximo 1.000 kg por caixa. Fixar com cintas de aço ou poliéster. Proteger com cantoneiras de papelão.",
+  },
+  {
+    label: "Para Válvulas em LCL:",
+    text: 'Sempre empacotar em caixas individuais dentro de cartons maiores. Colocar dessecantes em cada palet. Indicar claramente "FRÁGIL" na embalagem.',
+  },
+  {
+    label: "Para Conexões em LCL:",
+    text: "Empacotar em caixas de madeira ou papelão resistente. Máximo 500 kg por caixa para facilitar manipulação. Agrupar em paletes de no máximo 800 kg.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// FRETES
+// ---------------------------------------------------------------------------
+const FRETES_LCL = [
+  { rota: "Shangai → Porto de Santos (SP)", valor: "US$ 400-600 por m³", obs: "Rota principal de importação da Ásia", tempo: "35-45 dias" },
+  { rota: "Shangai → Porto de Itajaí (SC)", valor: "US$ 420-620 por m³", obs: "Importação com entrega em Santa Catarina", tempo: "36-46 dias" },
+  { rota: "Shangai → Porto de Navegantes (SC)", valor: "US$ 430-630 por m³", obs: "Alternativa para Santa Catarina", tempo: "37-47 dias" },
+  { rota: "Roterdã → Porto de Santos (SP)", valor: "US$ 350-500 por m³", obs: "Importação da Europa", tempo: "40-50 dias" },
+  { rota: "Shangai → Porto de Suape (PE)", valor: "US$ 450-650 por m³", obs: "Importação com entrega em Pernambuco", tempo: "38-48 dias" },
+  { rota: "Miami → Porto de Santos (SP)", valor: "US$ 300-450 por m³", obs: "Importação rápida dos EUA", tempo: "8-12 dias" },
+];
+
+const FRETES_FCL = [
+  { rota: "Shangai → Santos (FCL 20ft)", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias" },
+  { rota: "Shangai → Itajaí/Navegantes (FCL 20ft)", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias" },
+  { rota: "Shangai → Suape (FCL 20ft)", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias" },
+  { rota: "Roterdã → Santos (FCL 20ft)", valor: "US$ 1.000-1.500", capacidade: "18-20 toneladas", tempo: "45-55 dias" },
+  { rota: "Miami → Santos (FCL 20ft)", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias" },
+  { rota: "Miami → Suape (FCL 20ft)", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias" },
+];
+
+const ROTAS_AEREAS = [
+  "Xangai (PVG) → São Paulo (GRU): 5-7 dias",
+  "Frankfurt (FRA) → São Paulo (GRU): 8-10 dias",
+  "Miami (MIA) → São Paulo (GRU): 3-5 dias",
+];
+
+// ---------------------------------------------------------------------------
+// COMPONENTE
+// ---------------------------------------------------------------------------
 const Embarques = () => {
-  const [selectedContainer, setSelectedContainer] = useState<number | null>(null);
+  const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
 
   // Simulador
-  const [tipo, setTipo] = useState("Marítimo");
-  const [modal, setModal] = useState("LCL");
-  const [peso, setPeso] = useState("");
+  const [tipoFrete, setTipoFrete] = useState("Marítimo");
+  const [modalidade, setModalidade] = useState("LCL");
+  const [pesoReal, setPesoReal] = useState("");
   const [cbm, setCbm] = useState("");
-  const [urgencia, setUrgencia] = useState("baixa");
-  const [resultado, setResultado] = useState<null | {
-    recomendacao: string;
-    melhorCusto: number;
-    custoLCL: number;
-    custo20: number;
-    custo40: number;
-    custoAereo: number;
-  }>(null);
+  const [comprimento, setComprimento] = useState("");
+  const [largura, setLargura] = useState("");
+  const [altura, setAltura] = useState("");
+  const [origem, setOrigem] = useState("XINGANG - CHINA");
+  const [destino, setDestino] = useState("SC");
+  const [taxasAdicionais, setTaxasAdicionais] = useState("");
 
-  const calcular = () => {
-    const pesoNum = Number(peso || 0);
-    const cbmNum = Number(cbm || 0);
-
-    const custoLCL = cbmNum * 500;
-    const custo20 = 1500;
-    const custo40 = 2500;
-    const custoAereo = pesoNum * 6;
-
-    let recomendacao = "";
-    let melhorCusto = 0;
-
-    if (urgencia === "alta") {
-      recomendacao = "AÉREO";
-      melhorCusto = custoAereo;
-    } else if (cbmNum <= 15) {
-      recomendacao = "LCL";
-      melhorCusto = custoLCL;
-    } else if (cbmNum <= 33) {
-      recomendacao = "FCL 20ft";
-      melhorCusto = custo20;
-    } else if (cbmNum <= 67) {
-      recomendacao = "FCL 40ft";
-      melhorCusto = custo40;
-    } else {
-      recomendacao = "FCL 45ft";
-      melhorCusto = 3200;
+  const cotacoes = useMemo(() => {
+    const peso = Number(pesoReal || 0);
+    let volume = Number(cbm || 0);
+    if (!volume && comprimento && largura && altura) {
+      volume =
+        (Number(comprimento) * Number(largura) * Number(altura)) / 1_000_000;
     }
+    const pesoVolume = Math.max(peso / 1000, volume); // ton
+    const taxas = Number(taxasAdicionais || 0);
 
-    setResultado({ recomendacao, melhorCusto, custoLCL, custo20, custo40, custoAereo });
-  };
+    const lclBase = pesoVolume * 500 * 5; // mock conversion
+    const fcl20Base = 1500 * 5;
+    const fcl40Base = 2500 * 5;
+    const aereoBase = peso * 6 * 5;
 
-  const selected = selectedContainer !== null ? CONTAINERS[selectedContainer] : null;
+    const opcoes = [
+      { id: "LCL", nome: "LCL (TON)", base: lclBase, tipo: "Marítimo" },
+      { id: "FCL20", nome: "FCL 20ft", base: fcl20Base, tipo: "Marítimo" },
+      { id: "FCL40", nome: "FCL 40ft", base: fcl40Base, tipo: "Marítimo" },
+      { id: "AEREO", nome: "Aéreo", base: aereoBase, tipo: "Aéreo" },
+    ].map((o) => ({ ...o, total: o.base + taxas, taxas, pesoVolume }));
+
+    return opcoes;
+  }, [pesoReal, cbm, comprimento, largura, altura, taxasAdicionais]);
+
+  const melhor = useMemo(() => {
+    const validas = cotacoes.filter((o) => o.base > 0);
+    if (validas.length === 0) return null;
+    return validas.reduce((prev, cur) => (cur.total < prev.total ? cur : prev));
+  }, [cotacoes]);
+
+  const selected = CONTAINERS.find((c) => c.id === selectedContainer)!;
 
   return (
     <div className="min-h-screen bg-background">
       <HeaderTabs />
-      <main className="mx-auto max-w-[1600px] p-6 space-y-6">
-        <div className="flex items-center gap-2">
-          <Ship className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Gerenciamento de Embarque</h1>
+      <main className="mx-auto max-w-[1400px] px-6 py-6 space-y-6">
+        {/* Cabeçalho */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Ship className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Gerenciamento de Embarque</h1>
+            <p className="text-sm text-muted-foreground">
+              Informações de containers, fretes e embalagem
+            </p>
+          </div>
         </div>
 
         <Tabs defaultValue="containers" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+          <TabsList className="grid w-full grid-cols-5 h-auto">
             <TabsTrigger value="containers" className="gap-2">
-              <Package className="h-4 w-4" /> Containers
+              <Package className="h-4 w-4" />
+              <span className="hidden sm:inline">Containers</span>
             </TabsTrigger>
             <TabsTrigger value="embalagem" className="gap-2">
-              <Package className="h-4 w-4" /> Embalagem
+              <Truck className="h-4 w-4" />
+              <span className="hidden sm:inline">Embalagem</span>
             </TabsTrigger>
             <TabsTrigger value="fretes" className="gap-2">
-              <Truck className="h-4 w-4" /> Fretes
+              <Ship className="h-4 w-4" />
+              <span className="hidden sm:inline">Fretes</span>
             </TabsTrigger>
             <TabsTrigger value="internacionais" className="gap-2">
-              <Globe className="h-4 w-4" /> Internacionais
+              <DollarSign className="h-4 w-4" />
+              <span className="hidden sm:inline">Internacionais</span>
             </TabsTrigger>
             <TabsTrigger value="simulador" className="gap-2">
-              <Calculator className="h-4 w-4" /> Simulador
+              <Calculator className="h-4 w-4" />
+              <span className="hidden sm:inline">Simulador</span>
             </TabsTrigger>
           </TabsList>
 
-          {/* CONTAINERS */}
-          <TabsContent value="containers" className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {CONTAINERS.map((c, i) => (
+          {/* ============================== CONTAINERS ============================== */}
+          <TabsContent value="containers" className="space-y-6 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {CONTAINERS.map((c) => (
                 <Card
-                  key={c.nome}
-                  onClick={() => setSelectedContainer(i)}
+                  key={c.id}
+                  onClick={() => setSelectedContainer(c.id)}
                   className={cn(
-                    "p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/50",
-                    selectedContainer === i && "border-2 border-primary",
+                    "cursor-pointer transition-all hover:shadow-md",
+                    selectedContainer === c.id && "ring-2 ring-primary",
                   )}
                 >
-                  <h3 className="font-semibold text-base">{c.nome}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Capacidade: {c.cap}</p>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">{c.nome}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {c.descricao}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-2 pt-0">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Tipo</p>
+                      <p className="text-sm font-semibold">{c.tipo}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Dimensões</p>
+                      <p className="text-sm">{c.dimensoes}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Capacidade</p>
+                      <p className="text-sm">{c.capacidade}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Peso Máximo</p>
+                      <p className="text-sm">{c.pesoMax}</p>
+                    </div>
+                  </CardContent>
                 </Card>
               ))}
             </div>
 
-            <Card className="p-6">
-              {selected ? (
-                <div>
-                  <h2 className="text-xl font-bold mb-4">{selected.nome}</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Capacidade</p>
-                      <p className="font-semibold mt-1">{selected.cap}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Peso</p>
-                      <p className="font-semibold mt-1">{selected.peso}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Tempo</p>
-                      <p className="font-semibold mt-1">{selected.tempo}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Valor</p>
-                      <p className="font-semibold mt-1">{selected.valor}</p>
-                    </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{selected.nome}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="rounded-lg bg-muted/50 p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Dimensões</p>
+                    <p className="font-semibold">{selected.dimensoes}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Capacidade</p>
+                    <p className="font-semibold">{selected.capacidade}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Peso Máximo</p>
+                    <p className="font-semibold">{selected.pesoMax}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-4">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Tempo de Trânsito
+                    </p>
+                    <p className="font-semibold">{selected.tempo}</p>
                   </div>
                 </div>
-              ) : (
-                <h2 className="text-muted-foreground">Selecione um container</h2>
-              )}
+                <div className="rounded-lg border border-border p-4 bg-primary/5">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Valor Aproximado
+                  </p>
+                  <p className="text-lg font-bold text-primary">
+                    {selected.valor}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Valores variam conforme rota e sazonalidade
+                  </p>
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
 
-          {/* EMBALAGEM */}
-          <TabsContent value="embalagem" className="space-y-4">
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-3">Embalagem de Tubos</h2>
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Empacotar tubos em caixas de madeira resistente</li>
-                <li>Agrupar por diâmetro e comprimento</li>
-                <li>Preencher com papel kraft ou espuma</li>
-                <li>Fixar com cintas</li>
-                <li>Máximo 1.000 kg por caixa</li>
-              </ul>
-              <p className="mt-3 flex items-center gap-2 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4" /> Evitar umidade e danos mecânicos
-              </p>
-            </Card>
-
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-3">Embalagem de Válvulas</h2>
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Caixas de papelão resistente</li>
-                <li>Usar amortecimento</li>
-                <li>Máximo 800 kg por palete</li>
-              </ul>
-              <p className="mt-3 flex items-center gap-2 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4" /> Produto frágil
-              </p>
-            </Card>
-
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-3">Embalagem de Conexões</h2>
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Separar por tamanho</li>
-                <li>Máximo 500 kg por caixa</li>
-                <li>Paletes até 800 kg</li>
-              </ul>
-            </Card>
-          </TabsContent>
-
-          {/* FRETES */}
-          <TabsContent value="fretes" className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-2">Fretes LCL</h2>
-              <p className="text-sm text-muted-foreground">Shangai → Santos: US$ 400-600 / m³</p>
-              <p className="text-sm text-muted-foreground">Tempo: 35-45 dias</p>
-            </Card>
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-2">Fretes FCL</h2>
-              <p className="text-sm text-muted-foreground">20ft: US$ 1.200-1.800</p>
-              <p className="text-sm text-muted-foreground">Tempo: 40-50 dias</p>
-            </Card>
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-2">Frete Aéreo</h2>
-              <p className="text-sm text-muted-foreground">US$ 3.50 - 8.00 / kg</p>
-              <p className="text-sm text-muted-foreground">Tempo: 5-10 dias</p>
-            </Card>
-          </TabsContent>
-
-          {/* INTERNACIONAIS */}
-          <TabsContent value="internacionais" className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-2">Resumo</h2>
-              <p className="text-sm text-muted-foreground">Containers 20ft: 20</p>
-              <p className="text-sm text-muted-foreground">Containers 40ft: 86</p>
-              <p className="text-sm text-muted-foreground">Valor total: R$ 262.905,46</p>
-            </Card>
-            <Card className="p-6">
-              <h2 className="text-lg font-bold mb-2">Importação por mês</h2>
-              <p className="text-sm text-muted-foreground">2026-01: 66 containers</p>
-              <p className="text-sm text-muted-foreground">2026-02: 16 containers</p>
-            </Card>
-          </TabsContent>
-
-          {/* SIMULADOR */}
-          <TabsContent value="simulador">
-            <Card className="p-6 space-y-4 max-w-2xl">
-              <h2 className="text-lg font-bold">Simulador de Frete</h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Tipo</label>
-                  <Select value={tipo} onValueChange={setTipo}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Marítimo">Marítimo</SelectItem>
-                      <SelectItem value="Aéreo">Aéreo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Modal</label>
-                  <Select value={modal} onValueChange={setModal}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="LCL">LCL</SelectItem>
-                      <SelectItem value="FCL">FCL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Peso (kg)</label>
-                  <Input
-                    type="number"
-                    value={peso}
-                    onChange={(e) => setPeso(e.target.value)}
-                    placeholder="Peso kg"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">CBM (m³)</label>
-                  <Input
-                    type="number"
-                    value={cbm}
-                    onChange={(e) => setCbm(e.target.value)}
-                    placeholder="CBM"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Urgência</label>
-                  <Select value={urgencia} onValueChange={setUrgencia}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="baixa">Baixa</SelectItem>
-                      <SelectItem value="media">Média</SelectItem>
-                      <SelectItem value="alta">Alta</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Button onClick={calcular} className="w-full md:w-auto">
-                Calcular
-              </Button>
-
-              {resultado && (
-                <Card className="p-4 bg-muted/50 mt-4">
-                  <h3 className="text-lg font-bold text-primary">
-                    🚀 Melhor Opção: {resultado.recomendacao}
-                  </h3>
-                  <div className="mt-3 space-y-1 text-sm">
-                    <p>LCL: US$ {resultado.custoLCL.toFixed(2)}</p>
-                    <p>FCL 20ft: US$ {resultado.custo20}</p>
-                    <p>FCL 40ft: US$ {resultado.custo40}</p>
-                    <p>Aéreo: US$ {resultado.custoAereo.toFixed(2)}</p>
-                  </div>
-                  <h4 className="mt-3 text-base font-semibold">
-                    Total estimado: US$ {resultado.melhorCusto.toFixed(2)}
-                  </h4>
+          {/* ============================== EMBALAGEM ============================== */}
+          <TabsContent value="embalagem" className="space-y-6 mt-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {EMBALAGEM_GROUPS.map((g) => (
+                <Card key={g.titulo}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{g.titulo}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Instruções</h4>
+                      <ul className="space-y-1 text-sm text-muted-foreground">
+                        {g.instrucoes.map((i) => (
+                          <li key={i}>• {i}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">
+                        Cuidados Especiais
+                      </h4>
+                      <ul className="space-y-1 text-sm">
+                        {g.cuidados.map((c) => (
+                          <li
+                            key={c}
+                            className="flex items-start gap-1.5 text-destructive"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                            <span>{c}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </CardContent>
                 </Card>
-              )}
+              ))}
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Recomendações Gerais para LCL
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                {RECOMENDACOES_LCL.map((r) => (
+                  <p key={r.label}>
+                    <span className="font-semibold text-foreground">
+                      {r.label}
+                    </span>{" "}
+                    {r.text}
+                  </p>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ============================== FRETES ============================== */}
+          <TabsContent value="fretes" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Fretes LCL Aproximados</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Less than Container Load - Consolidação de carga
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {FRETES_LCL.map((f) => (
+                    <div
+                      key={f.rota}
+                      className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold">{f.rota}</p>
+                        <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                          LCL
+                        </span>
+                      </div>
+                      <p className="text-base font-bold text-primary">{f.valor}</p>
+                      <p className="text-xs text-muted-foreground">{f.obs}</p>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="font-medium">Tempo:</span>
+                        <span>{f.tempo}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Fretes FCL Aproximados</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Full Container Load - Container completo
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {["20ft", "40ft", "45ft HC"].map((b) => (
+                    <span
+                      key={b}
+                      className="text-xs font-semibold bg-muted px-3 py-1 rounded-full"
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {FRETES_FCL.map((f) => (
+                    <div
+                      key={f.rota}
+                      className="rounded-lg border p-4 space-y-2 hover:shadow-sm transition-shadow"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold">{f.rota}</p>
+                        <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                          FCL
+                        </span>
+                      </div>
+                      <p className="text-base font-bold text-primary">{f.valor}</p>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="font-medium">Capacidade:</span>
+                        <span>{f.capacidade}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="font-medium">Tempo:</span>
+                        <span>{f.tempo}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Frete Aéreo</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <p className="text-sm">
+                    <span className="font-semibold">Valor Aproximado:</span> US$
+                    3.50 - US$ 8.00 por kg
+                  </p>
+                  <p className="text-sm">
+                    <span className="font-semibold">Tempo de Trânsito:</span> 5-10
+                    dias
+                  </p>
+                </div>
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                  <p>
+                    Frete aéreo é significativamente mais caro, indicado apenas
+                    para pedidos urgentes de pequena quantidade. Peso mínimo
+                    geralmente 100 kg.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">
+                    Principais Rotas Aéreas de Importação:
+                  </h4>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    {ROTAS_AEREAS.map((r) => (
+                      <li key={r}>• {r}</li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ============================== INTERNACIONAIS ============================== */}
+          <TabsContent value="internacionais" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Fretes Internacionais</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Cotações de frete para importação (China/Exterior → Brasil)
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">
+                    Carregar Planilha de Cotações
+                  </h4>
+                  <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-6 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Carregar Planilha de Fretes
+                    </span>
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" />
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Colunas suportadas: Região, Valor, Prazo, Agente, Peso
+                    Mín/Máx, Tipo Container, Quantidade, PO, Exportador, Tipo
+                    Agente, Peso KG, Data
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <h4 className="text-sm font-semibold mb-1">
+                    Nenhuma planilha carregada
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Os fretes nacionais de HCI serão exibidos aqui após o
+                    carregamento da planilha de cotações.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-sm font-semibold mb-2">
+                    Esperadas Informações:
+                  </h4>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    <li>• Regiões de entrega</li>
+                    <li>• Valores por região</li>
+                    <li>• Tempo de entrega</li>
+                    <li>• Peso mínimo e máximo</li>
+                    <li>• Agentes/Transportadoras</li>
+                    <li>• Tipos de container</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ============================== SIMULADOR ============================== */}
+          <TabsContent value="simulador" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calculator className="h-5 w-5" /> Simulador de Frete
+                  Internacional
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Calcule cotações de frete aéreo ou marítimo em tempo real
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Tipo de Frete
+                    </label>
+                    <Select value={tipoFrete} onValueChange={setTipoFrete}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Marítimo">Marítimo</SelectItem>
+                        <SelectItem value="Aéreo">Aéreo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Modalidade
+                    </label>
+                    <Select value={modalidade} onValueChange={setModalidade}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="LCL">
+                          LCL (Less Container Load)
+                        </SelectItem>
+                        <SelectItem value="FCL20">FCL 20ft</SelectItem>
+                        <SelectItem value="FCL40">FCL 40ft</SelectItem>
+                        <SelectItem value="AEREO">Aéreo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Peso Real (kg)
+                    </label>
+                    <Input
+                      type="number"
+                      value={pesoReal}
+                      placeholder="0"
+                      onChange={(e) => setPesoReal(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      CBM (m³) - Opcional
+                    </label>
+                    <Input
+                      type="number"
+                      value={cbm}
+                      placeholder="0"
+                      onChange={(e) => setCbm(e.target.value)}
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Se preenchido, ignora as dimensões
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Comprimento (cm)
+                    </label>
+                    <Input
+                      type="number"
+                      value={comprimento}
+                      placeholder="0"
+                      onChange={(e) => setComprimento(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Largura (cm)
+                    </label>
+                    <Input
+                      type="number"
+                      value={largura}
+                      placeholder="0"
+                      onChange={(e) => setLargura(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Altura (cm)
+                    </label>
+                    <Input
+                      type="number"
+                      value={altura}
+                      placeholder="0"
+                      onChange={(e) => setAltura(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Origem
+                    </label>
+                    <Input
+                      value={origem}
+                      onChange={(e) => setOrigem(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Destino
+                    </label>
+                    <Input
+                      value={destino}
+                      onChange={(e) => setDestino(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Taxas Adicionais (R$)
+                    </label>
+                    <Input
+                      type="number"
+                      value={taxasAdicionais}
+                      placeholder="0"
+                      onChange={(e) => setTaxasAdicionais(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Cotações Disponíveis</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {melhor ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {cotacoes.map((o) => {
+                      const isBest = melhor && o.id === melhor.id;
+                      return (
+                        <div
+                          key={o.id}
+                          className={cn(
+                            "rounded-lg border p-4 space-y-2 relative",
+                            isBest && "border-primary bg-primary/5",
+                          )}
+                        >
+                          {isBest && (
+                            <span className="absolute -top-2 right-3 bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded">
+                              MELHOR OPÇÃO
+                            </span>
+                          )}
+                          <p className="text-sm font-semibold">{o.nome}</p>
+                          <div className="text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Peso/Volume
+                              </span>
+                              <span>{o.pesoVolume.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Frete Base
+                              </span>
+                              <span>R$ {o.base.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Taxas</span>
+                              <span>R$ {o.taxas.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between font-semibold pt-1 border-t">
+                              <span>Total</span>
+                              <span className="text-primary">
+                                R$ {o.total.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={isBest ? "default" : "outline"}
+                            className="w-full mt-2"
+                          >
+                            Fechar este Frete
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    Preencha o peso e dimensões para calcular as cotações de frete
+                  </p>
+                )}
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
