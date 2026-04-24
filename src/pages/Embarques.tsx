@@ -201,15 +201,28 @@ const FRETES_LCL = [
   { rota: "Miami → Porto de Santos (SP)", valor: "US$ 300-450 por m³", obs: "Importação rápida dos EUA", tempo: "8-12 dias" },
 ];
 
-type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string };
+type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string; tipo: "20ft" | "40ft" | "45ft HC" };
 
 const FRETES_FCL_DEFAULT: FreteFCL[] = [
-  { rota: "Shangai → Santos (FCL 20ft)", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias" },
-  { rota: "Shangai → Itajaí/Navegantes (FCL 20ft)", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias" },
-  { rota: "Shangai → Suape (FCL 20ft)", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias" },
-  { rota: "Roterdã → Santos (FCL 20ft)", valor: "US$ 1.000-1.500", capacidade: "18-20 toneladas", tempo: "45-55 dias" },
-  { rota: "Miami → Santos (FCL 20ft)", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias" },
-  { rota: "Miami → Suape (FCL 20ft)", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias" },
+  // 20ft
+  { rota: "Shangai → Santos", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias", tipo: "20ft" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias", tipo: "20ft" },
+  { rota: "Shangai → Suape", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias", tipo: "20ft" },
+  { rota: "Roterdã → Santos", valor: "US$ 1.000-1.500", capacidade: "18-20 toneladas", tempo: "45-55 dias", tipo: "20ft" },
+  { rota: "Miami → Santos", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias", tipo: "20ft" },
+  { rota: "Miami → Suape", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias", tipo: "20ft" },
+  // 40ft
+  { rota: "Shangai → Santos", valor: "US$ 2.000-3.000", capacidade: "26-28 toneladas", tempo: "40-50 dias", tipo: "40ft" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.100-3.100", capacidade: "26-28 toneladas", tempo: "41-51 dias", tipo: "40ft" },
+  { rota: "Shangai → Suape", valor: "US$ 2.200-3.200", capacidade: "26-28 toneladas", tempo: "42-52 dias", tipo: "40ft" },
+  { rota: "Roterdã → Santos", valor: "US$ 1.700-2.500", capacidade: "26-28 toneladas", tempo: "45-55 dias", tipo: "40ft" },
+  { rota: "Miami → Santos", valor: "US$ 1.400-2.000", capacidade: "26-28 toneladas", tempo: "8-12 dias", tipo: "40ft" },
+  { rota: "Miami → Suape", valor: "US$ 1.500-2.100", capacidade: "26-28 toneladas", tempo: "10-14 dias", tipo: "40ft" },
+  // 45ft HC
+  { rota: "Shangai → Santos", valor: "US$ 2.500-3.500", capacidade: "28-30 toneladas", tempo: "40-50 dias", tipo: "45ft HC" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.600-3.600", capacidade: "28-30 toneladas", tempo: "41-51 dias", tipo: "45ft HC" },
+  { rota: "Roterdã → Santos", valor: "US$ 2.200-3.000", capacidade: "28-30 toneladas", tempo: "45-55 dias", tipo: "45ft HC" },
+  { rota: "Miami → Santos", valor: "US$ 1.800-2.500", capacidade: "28-30 toneladas", tempo: "8-12 dias", tipo: "45ft HC" },
 ];
 
 type FreteIntl = Record<string, string | number>;
