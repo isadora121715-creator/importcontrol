@@ -496,6 +496,78 @@ const Geral = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Relatório por dimensão */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Relatório por Dimensão
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Agrupe os dados por mês, fornecedor, cliente ou PO e exporte em CSV.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={reportDim} onValueChange={(v) => setReportDim(v as ReportDimension)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mes">Por Mês</SelectItem>
+                    <SelectItem value="fornecedor">Por Fornecedor</SelectItem>
+                    <SelectItem value="cliente">Por Cliente</SelectItem>
+                    <SelectItem value="po">Por PO</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={downloadReportCsv} disabled={report.length === 0}>
+                  <Download className="h-4 w-4 mr-2" /> Baixar CSV
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {report.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Nenhum dado disponível para esta dimensão.
+              </p>
+            ) : (
+              <div className="overflow-auto rounded-lg border max-h-[500px]">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">
+                        {reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO"}
+                      </th>
+                      <th className="text-right px-3 py-2 font-semibold">Registros</th>
+                      <th className="text-right px-3 py-2 font-semibold">POs Únicas</th>
+                      <th className="text-right px-3 py-2 font-semibold">Valor Compra</th>
+                      <th className="text-right px-3 py-2 font-semibold">Valor Venda</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.slice(0, 200).map((r) => (
+                      <tr key={r.rawKey} className="border-t hover:bg-muted/30">
+                        <td className="px-3 py-2 whitespace-nowrap font-medium">{r.chave}</td>
+                        <td className="px-3 py-2 text-right">{r.registros}</td>
+                        <td className="px-3 py-2 text-right">{r.pos}</td>
+                        <td className="px-3 py-2 text-right">{formatBRL(r.valorCompra)}</td>
+                        <td className="px-3 py-2 text-right">{formatBRL(r.valorVenda)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {report.length > 200 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">
+                    Mostrando 200 de {report.length} resultados — baixe o CSV para ver todos.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
