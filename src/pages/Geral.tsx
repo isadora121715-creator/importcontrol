@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Package, Users, ShoppingCart, DollarSign, FileText } from "lucide-react";
+import { BarChart2, Package, Users, ShoppingCart, DollarSign, FileText, Download } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -19,6 +19,14 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DashboardLoadingSkeleton, DashboardErrorState } from "@/components/dashboard/DashboardStates";
 
 type PedidoSummary = {
