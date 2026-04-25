@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
-const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v3";
+const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v4";
 
 // ---------------------------------------------------------------------------
 // CONTAINERS
@@ -634,7 +634,7 @@ const Embarques = () => {
           mesesSet.add(mk);
           if (!monthMap.has(mk)) monthMap.set(mk, { containers: 0, peso: 0, qty20: 0, qty40: 0, qty45: 0 });
           const m = monthMap.get(mk)!;
-          m.containers += q20 + q40 + q45 || qtd;
+          m.containers += q20 + q40 + q45;
           m.qty20 += q20;
           m.qty40 += q40;
           m.qty45 += q45;
