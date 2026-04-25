@@ -246,9 +246,9 @@ const Embarques = () => {
   // Internacionais (planilha persistida)
   const [intlRows, setIntlRows] = useState<FreteIntl[]>([]);
   const [intlColumns, setIntlColumns] = useState<string[]>([]);
+  const [intlSubHeaders, setIntlSubHeaders] = useState<string[]>([]);
   const [intlFileName, setIntlFileName] = useState<string>("");
   const [intlUploadedAt, setIntlUploadedAt] = useState<string>("");
-  // Totais lidos diretamente da planilha (linha de totais 365 e contagem aérea)
   const [intlTotals, setIntlTotals] = useState<{
     cont20: number;
     cont40: number;
@@ -264,12 +264,14 @@ const Embarques = () => {
       const saved = JSON.parse(raw) as {
         rows: FreteIntl[];
         columns: string[];
+        subHeaders?: string[];
         fileName: string;
         uploadedAt: string;
         totals?: { cont20: number; cont40: number; cont45: number; aereo: number };
       };
       setIntlRows(saved.rows ?? []);
       setIntlColumns(saved.columns ?? []);
+      setIntlSubHeaders(saved.subHeaders ?? []);
       setIntlFileName(saved.fileName ?? "");
       setIntlUploadedAt(saved.uploadedAt ?? "");
       if (saved.totals) setIntlTotals(saved.totals);
@@ -319,14 +321,18 @@ const Embarques = () => {
       // Coluna E (índice 4) = MODALIDADE — conta pedidos aéreos, ignorando totais
       let aereo = 0;
       const dataRows: FreteIntl[] = [];
+      let capturedSubRow: string[] = [];
       matrix.forEach((row, idx) => {
         if (idx === 0) return; // header
         if (idx === totalsIdx) return; // pular linha de totais
         const r = row as unknown[];
-        // Linha do subcabeçalho ("20'", "40'"...) — pular
+        // Linha do subcabeçalho ("20'", "40'"...) — capturar e pular
         const isSubHeader =
           r[6] === "20'" || r[6] === '20"' || (typeof r[6] === "string" && /^20['"]/.test(String(r[6])));
-        if (isSubHeader) return;
+        if (isSubHeader) {
+          capturedSubRow = (r as unknown[]).map((v) => (v !== null && v !== undefined && v !== "" ? String(v).trim() : ""));
+          return;
+        }
         // Linha vazia significativa
         const hasData = r.some((v) => v !== "" && v !== null && v !== undefined);
         if (!hasData) return;
@@ -342,10 +348,12 @@ const Embarques = () => {
         if (Object.keys(obj).length > 0) dataRows.push(obj);
       });
 
+      const subHeaders = headers.map((_, i) => capturedSubRow[i] ?? "");
       const totals = { cont20, cont40, cont45, aereo };
       const uploadedAt = new Date().toISOString();
       setIntlRows(dataRows);
       setIntlColumns(headers);
+      setIntlSubHeaders(subHeaders);
       setIntlFileName(file.name);
       setIntlUploadedAt(uploadedAt);
       setIntlTotals(totals);
@@ -354,6 +362,7 @@ const Embarques = () => {
         JSON.stringify({
           rows: dataRows,
           columns: headers,
+          subHeaders,
           fileName: file.name,
           uploadedAt,
           totals,
@@ -375,6 +384,7 @@ const Embarques = () => {
   const clearIntl = () => {
     setIntlRows([]);
     setIntlColumns([]);
+    setIntlSubHeaders([]);
     setIntlFileName("");
     setIntlUploadedAt("");
     setIntlTotals({ cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
@@ -391,12 +401,15 @@ const Embarques = () => {
   };
 
   // ---- Filtros e estatísticas para Internacionais ----
-  const [intlFilterTipo, setIntlFilterTipo] = useState<string>("Todos");
+  const [intlFilterTipos, setIntlFilterTipos] = useState<string[]>([]);
   const [intlFilterPO, setIntlFilterPO] = useState<string>("");
-  const [intlFilterExp, setIntlFilterExp] = useState<string>("Todos");
-  const [intlFilterAgente, setIntlFilterAgente] = useState<string>("Todos");
+  const [intlFilterExps, setIntlFilterExps] = useState<string[]>([]);
+  const [intlFilterAgentes, setIntlFilterAgentes] = useState<string[]>([]);
   const [intlFilterMeses, setIntlFilterMeses] = useState<string[]>([]);
   const [rotasVisiveis, setRotasVisiveis] = useState<number>(10);
+
+  const COL_NAME_MAP: Record<string, string> = { Col8: "20ft", Col9: "40ft", Col10: "45ft" };
+  const colLabel = (c: string) => COL_NAME_MAP[c] ?? c;
 
   const intlField = useMemo(() => {
     const norm = (s: string) =>
@@ -408,7 +421,8 @@ const Embarques = () => {
     const find = (...needles: string[]) =>
       intlColumns.find((c) => needles.some((n) => norm(c).includes(n))) ?? null;
     return {
-      po: find("po"),
+      // Coluna D (índice 3) é a PO por definição da planilha
+      po: intlColumns[3] ?? find("po"),
       exportador: find("exportador", "shipper", "fornecedor"),
       agente: find("agente", "agent"),
       container: find("container", "modalidade", "tipo"),
@@ -419,6 +433,28 @@ const Embarques = () => {
       praco: find("praco", "prazo", "lead"),
     };
   }, [intlColumns]);
+
+  const formatDate = (v: unknown): string | null => {
+    if (!v) return null;
+    if (typeof v === "number" && v > 30000) {
+      const utcDays = Math.floor(v - 25569);
+      const date = new Date(utcDays * 86400000);
+      const dd = String(date.getUTCDate()).padStart(2, "0");
+      const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const yyyy = date.getUTCFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    }
+    if (typeof v === "string") {
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return v;
+      const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+    }
+    return null;
+  };
+  const isDateCol = (colName: string) =>
+    /data|date|eta|etd|embarque|prazo|vencimento/.test(
+      colName.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""),
+    );
 
   const detectQty = (v: unknown): number => {
     if (typeof v === "number") return v;
@@ -528,19 +564,20 @@ const Embarques = () => {
 
   const intlRowsFiltradas = useMemo(() => {
     return intlRows.filter((r) => {
-      if (intlFilterTipo !== "Todos" && intlField.container) {
+      if (intlFilterTipos.length > 0 && intlField.container) {
         const cont = String(r[intlField.container] ?? "").toLowerCase();
-        if (!cont.includes(intlFilterTipo.toLowerCase())) return false;
+        const match = intlFilterTipos.some((t) => cont.includes(t.toLowerCase()));
+        if (!match) return false;
       }
       if (intlFilterPO && intlField.po) {
         const po = String(r[intlField.po] ?? "").toLowerCase();
         if (!po.includes(intlFilterPO.toLowerCase())) return false;
       }
-      if (intlFilterExp !== "Todos" && intlField.exportador) {
-        if (String(r[intlField.exportador] ?? "") !== intlFilterExp) return false;
+      if (intlFilterExps.length > 0 && intlField.exportador) {
+        if (!intlFilterExps.includes(String(r[intlField.exportador] ?? ""))) return false;
       }
-      if (intlFilterAgente !== "Todos" && intlField.agente) {
-        if (String(r[intlField.agente] ?? "") !== intlFilterAgente) return false;
+      if (intlFilterAgentes.length > 0 && intlField.agente) {
+        if (!intlFilterAgentes.includes(String(r[intlField.agente] ?? ""))) return false;
       }
       if (intlFilterMeses.length > 0 && intlField.mes) {
         const mk = detectMonth(r[intlField.mes]);
@@ -548,11 +585,56 @@ const Embarques = () => {
       }
       return true;
     });
-  }, [intlRows, intlField, intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente, intlFilterMeses]);
+  }, [intlRows, intlField, intlFilterTipos, intlFilterPO, intlFilterExps, intlFilterAgentes, intlFilterMeses]);
 
   useEffect(() => {
     setRotasVisiveis(10);
-  }, [intlFilterTipo, intlFilterPO, intlFilterExp, intlFilterAgente, intlFilterMeses]);
+  }, [intlFilterTipos, intlFilterPO, intlFilterExps, intlFilterAgentes, intlFilterMeses]);
+
+  // KPIs calculados dos dados filtrados (refletem todos os filtros ativos)
+  const intlKpis = useMemo(() => {
+    const rows = intlRowsFiltradas;
+    const containers = { "20ft": 0, "40ft": 0, "45ft": 0 };
+    const modalidades = { LCL: 0, FCL: 0, Aereo: 0 };
+    const agentesSet = new Set<string>();
+    let pesoTotal = 0;
+    let valorTotal = 0;
+    const mesesSet = new Set<string>();
+    const monthMap = new Map<string, { containers: number; peso: number }>();
+    rows.forEach((r) => {
+      const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
+      const qtd = intlField.qtdContainer ? detectQty(r[intlField.qtdContainer]) || 1 : 1;
+      if (cont.includes("20")) containers["20ft"] += qtd;
+      else if (cont.includes("45")) containers["45ft"] += qtd;
+      else if (cont.includes("40")) containers["40ft"] += qtd;
+      if (cont.includes("lcl")) modalidades.LCL += 1;
+      else if (cont.includes("aer") || cont.includes("air")) modalidades.Aereo += 1;
+      else if (cont.includes("fcl") || cont.includes("20") || cont.includes("40") || cont.includes("45")) modalidades.FCL += 1;
+      if (intlField.agente && r[intlField.agente]) agentesSet.add(String(r[intlField.agente]));
+      if (intlField.peso) pesoTotal += detectQty(r[intlField.peso]);
+      if (intlField.valor) valorTotal += detectQty(r[intlField.valor]);
+      if (intlField.mes) {
+        const mk = detectMonth(r[intlField.mes]);
+        if (mk) {
+          mesesSet.add(mk);
+          if (!monthMap.has(mk)) monthMap.set(mk, { containers: 0, peso: 0 });
+          const m = monthMap.get(mk)!;
+          m.containers += qtd;
+          m.peso += intlField.peso ? detectQty(r[intlField.peso]) : 0;
+        }
+      }
+    });
+    const totalContainers = containers["20ft"] + containers["40ft"] + containers["45ft"];
+    const monthsList = Array.from(mesesSet).sort();
+    const mediaContainers = monthsList.length > 0 ? totalContainers / monthsList.length : 0;
+    const mediaKgMes = monthsList.length > 0 ? pesoTotal / monthsList.length : 0;
+    const detalhesPorMes = monthsList.map((mk) => ({
+      mes: mk,
+      containers: monthMap.get(mk)?.containers ?? 0,
+      peso: monthMap.get(mk)?.peso ?? 0,
+    }));
+    return { containers, modalidades, agentes: agentesSet.size, pesoTotal, valorTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
+  }, [intlRowsFiltradas, intlField]);
 
   const formatBRLIntl = (v: number) =>
     `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -971,27 +1053,27 @@ const Embarques = () => {
                   </div>
                 ) : (
                   <>
-                    {/* KPI cards superiores */}
+                    {/* KPI cards superiores — refletem filtros ativos */}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
                         <p className="text-xs text-blue-500 font-semibold">Containers 20ft</p>
-                        <p className="text-2xl font-bold">{intlStats.containers["20ft"]}</p>
+                        <p className="text-2xl font-bold">{intlKpis.containers["20ft"]}</p>
                       </div>
                       <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
                         <p className="text-xs text-blue-500 font-semibold">Containers 40ft</p>
-                        <p className="text-2xl font-bold">{intlStats.containers["40ft"]}</p>
+                        <p className="text-2xl font-bold">{intlKpis.containers["40ft"]}</p>
                       </div>
                       <div className="rounded-lg border-2 border-blue-500/40 p-3 text-center">
                         <p className="text-xs text-blue-500 font-semibold">Containers 45ft</p>
-                        <p className="text-2xl font-bold">{intlStats.containers["45ft"]}</p>
+                        <p className="text-2xl font-bold">{intlKpis.containers["45ft"]}</p>
                       </div>
                       <div className="rounded-lg border-2 border-emerald-500/40 p-3 text-center">
                         <p className="text-xs text-emerald-500 font-semibold">Peso Total (aprox.)</p>
-                        <p className="text-2xl font-bold">{formatPesoApprox(intlStats.pesoTotal)}</p>
+                        <p className="text-2xl font-bold">{formatPesoApprox(intlKpis.pesoTotal)}</p>
                       </div>
                       <div className="rounded-lg border-2 border-fuchsia-500/40 p-3 text-center">
                         <p className="text-xs text-fuchsia-500 font-semibold">Agentes</p>
-                        <p className="text-2xl font-bold">{intlStats.agentes.length}</p>
+                        <p className="text-2xl font-bold">{intlKpis.agentes}</p>
                       </div>
                     </div>
 
@@ -999,22 +1081,22 @@ const Embarques = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="rounded-lg border-2 border-emerald-500/40 p-3">
                         <p className="text-xs text-emerald-500 font-semibold">Modalidade LCL</p>
-                        <p className="text-2xl font-bold">{intlStats.modalidades.LCL}</p>
+                        <p className="text-2xl font-bold">{intlKpis.modalidades.LCL}</p>
                       </div>
                       <div className="rounded-lg border-2 border-blue-500/40 p-3">
                         <p className="text-xs text-blue-500 font-semibold">Modalidade FCL</p>
-                        <p className="text-2xl font-bold">{intlStats.modalidades.FCL}</p>
+                        <p className="text-2xl font-bold">{intlKpis.modalidades.FCL}</p>
                       </div>
                       <div className="rounded-lg border-2 border-orange-500/40 p-3">
                         <p className="text-xs text-orange-500 font-semibold">Modalidade Aéreo</p>
-                        <p className="text-2xl font-bold">{intlStats.modalidades.Aereo}</p>
+                        <p className="text-2xl font-bold">{intlKpis.modalidades.Aereo}</p>
                       </div>
                     </div>
 
                     {/* Valor total */}
                     <div className="rounded-lg border-2 border-emerald-500/40 p-4">
                       <p className="text-sm text-emerald-500 font-semibold">Valor Total de Fretes</p>
-                      <p className="text-2xl font-bold text-emerald-500">{formatBRLIntl(intlStats.valorTotal)}</p>
+                      <p className="text-2xl font-bold text-emerald-500">{formatBRLIntl(intlKpis.valorTotal)}</p>
                     </div>
 
                     {/* Filtros */}
@@ -1023,19 +1105,41 @@ const Embarques = () => {
                         <CardTitle className="text-sm">Filtros</CardTitle>
                       </CardHeader>
                       <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        {/* Tipo de Container — multi-select */}
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Tipo de Container</label>
-                          <Select value={intlFilterTipo} onValueChange={setIntlFilterTipo}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Todos">Todos</SelectItem>
-                              <SelectItem value="20">20ft</SelectItem>
-                              <SelectItem value="40">40ft</SelectItem>
-                              <SelectItem value="45">45ft</SelectItem>
-                              <SelectItem value="LCL">LCL</SelectItem>
-                              <SelectItem value="Aéreo">Aéreo</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-between text-sm font-normal h-9 px-3">
+                                <span className="truncate">
+                                  {intlFilterTipos.length === 0 ? "Todos" : intlFilterTipos.length === 1 ? intlFilterTipos[0] : `${intlFilterTipos.length} tipos`}
+                                </span>
+                                <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-40 p-2" align="start">
+                              <div className="space-y-1">
+                                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                  <input type="checkbox" className="h-3.5 w-3.5" checked={intlFilterTipos.length === 0} onChange={() => setIntlFilterTipos([])} />
+                                  Todos
+                                </label>
+                                {["20", "40", "45", "LCL", "Aéreo"].map((t) => (
+                                  <label key={t} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5"
+                                      checked={intlFilterTipos.includes(t)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) setIntlFilterTipos((p) => [...p, t]);
+                                        else setIntlFilterTipos((p) => p.filter((x) => x !== t));
+                                      }}
+                                    />
+                                    {t === "20" ? "20ft" : t === "40" ? "40ft" : t === "45" ? "45ft" : t}
+                                  </label>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">PO (Pesquisar)</label>
@@ -1045,29 +1149,77 @@ const Embarques = () => {
                             onChange={(e) => setIntlFilterPO(e.target.value)}
                           />
                         </div>
+                        {/* Exportador — multi-select */}
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Exportador</label>
-                          <Select value={intlFilterExp} onValueChange={setIntlFilterExp}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Todos">Todos</SelectItem>
-                              {intlStats.exportadores.map((e) => (
-                                <SelectItem key={e} value={e}>{e}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-between text-sm font-normal h-9 px-3">
+                                <span className="truncate">
+                                  {intlFilterExps.length === 0 ? "Todos" : intlFilterExps.length === 1 ? intlFilterExps[0] : `${intlFilterExps.length} selecionados`}
+                                </span>
+                                <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-2" align="start">
+                              <div className="space-y-1 max-h-52 overflow-y-auto">
+                                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                  <input type="checkbox" className="h-3.5 w-3.5" checked={intlFilterExps.length === 0} onChange={() => setIntlFilterExps([])} />
+                                  Todos
+                                </label>
+                                {intlStats.exportadores.map((e) => (
+                                  <label key={e} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5"
+                                      checked={intlFilterExps.includes(e)}
+                                      onChange={(ev) => {
+                                        if (ev.target.checked) setIntlFilterExps((p) => [...p, e]);
+                                        else setIntlFilterExps((p) => p.filter((x) => x !== e));
+                                      }}
+                                    />
+                                    <span className="truncate">{e}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
+                        {/* Agente — multi-select */}
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Agente</label>
-                          <Select value={intlFilterAgente} onValueChange={setIntlFilterAgente}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Todos">Todos</SelectItem>
-                              {intlStats.agentes.map((a) => (
-                                <SelectItem key={a} value={a}>{a}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className="w-full justify-between text-sm font-normal h-9 px-3">
+                                <span className="truncate">
+                                  {intlFilterAgentes.length === 0 ? "Todos" : intlFilterAgentes.length === 1 ? intlFilterAgentes[0] : `${intlFilterAgentes.length} selecionados`}
+                                </span>
+                                <ChevronDown className="h-4 w-4 shrink-0 opacity-50 ml-2" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-52 p-2" align="start">
+                              <div className="space-y-1 max-h-52 overflow-y-auto">
+                                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                  <input type="checkbox" className="h-3.5 w-3.5" checked={intlFilterAgentes.length === 0} onChange={() => setIntlFilterAgentes([])} />
+                                  Todos
+                                </label>
+                                {intlStats.agentes.map((a) => (
+                                  <label key={a} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5"
+                                      checked={intlFilterAgentes.includes(a)}
+                                      onChange={(ev) => {
+                                        if (ev.target.checked) setIntlFilterAgentes((p) => [...p, a]);
+                                        else setIntlFilterAgentes((p) => p.filter((x) => x !== a));
+                                      }}
+                                    />
+                                    <span className="truncate">{a}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Mês</label>
@@ -1124,26 +1276,26 @@ const Embarques = () => {
                       <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                         <div>
                           <p className="text-xs text-muted-foreground">Quantidade Média de Containers por Mês</p>
-                          <p className="text-3xl font-bold text-blue-500">{intlStats.mediaContainers.toFixed(1)}</p>
+                          <p className="text-3xl font-bold text-blue-500">{intlKpis.mediaContainers.toFixed(1)}</p>
                         </div>
                         <div className="text-xs text-muted-foreground space-y-0.5">
-                          <p>Total de meses: {intlStats.meses.length}</p>
-                          <p>Total de containers: {intlStats.totalContainers}</p>
-                          <p>Média de kg/mês: {(intlStats.mediaKgMes / 1000).toFixed(1)}k kg</p>
+                          <p>Total de meses: {intlKpis.meses.length}</p>
+                          <p>Total de containers: {intlKpis.totalContainers}</p>
+                          <p>Média de kg/mês: {(intlKpis.mediaKgMes / 1000).toFixed(1)}k kg</p>
                         </div>
                       </CardContent>
                     </Card>
 
                     {/* Detalhes por Mês */}
-                    {intlStats.detalhesPorMes.length > 0 && (
+                    {intlKpis.detalhesPorMes.length > 0 && (
                       <Card>
                         <CardHeader className="pb-3">
                           <CardTitle className="text-sm">Detalhes por Mês</CardTitle>
                         </CardHeader>
                         <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {intlStats.detalhesPorMes.map((d) => (
+                          {intlKpis.detalhesPorMes.map((d) => (
                             <div key={d.mes} className="rounded-lg border-2 border-blue-500/40 p-3">
-                              <p className="text-xs font-semibold">{monthLabelKey(d.mes)}</p>
+                              <p className="text-xs font-semibold">{d.mes}</p>
                               <p className="text-lg font-bold">{d.containers} containers</p>
                               <p className="text-xs text-muted-foreground">{(d.peso / 1000).toFixed(1)}k kg</p>
                             </div>
@@ -1161,12 +1313,15 @@ const Embarques = () => {
                     </div>
                     <div className="space-y-2">
                       {intlRowsFiltradas.slice(0, rotasVisiveis).map((row, i) => {
-                        const po = intlField.po ? String(row[intlField.po] ?? "") : "";
+                        // PO sempre da coluna D (índice 3)
+                        const poColD = intlColumns[3] ? String(row[intlColumns[3]] ?? "") : "";
+                        const po = poColD || (intlField.po ? String(row[intlField.po] ?? "") : "");
                         const exp = intlField.exportador ? String(row[intlField.exportador] ?? "") : "";
                         const cont = intlField.container ? String(row[intlField.container] ?? "") : "";
                         const qtd = intlField.qtdContainer ? String(row[intlField.qtdContainer] ?? "") : "";
                         const valor = intlField.valor ? detectQty(row[intlField.valor]) : 0;
-                        const praco = intlField.praco ? String(row[intlField.praco] ?? "") : "";
+                        const pracoRaw = intlField.praco ? row[intlField.praco] : null;
+                        const praco = pracoRaw ? (formatDate(pracoRaw) ?? String(pracoRaw)) : "";
                         const contLower = cont.toLowerCase();
                         const contTipo = contLower.includes("lcl") ? "LCL" : contLower.includes("aer") || contLower.includes("air") ? "Aéreo" : contLower.includes("fcl") ? "FCL" : cont.replace(/\d+['"]?\s*(ft|hc)?/gi, "").trim() || "FCL";
                         const contSize = cont.match(/(\d+['"]?\s*(?:ft|hc|HC)?)/i)?.[1]?.trim() ?? "";
@@ -1236,13 +1391,24 @@ const Embarques = () => {
                       <div className="overflow-auto max-h-[600px]">
                         <table className="w-full text-xs border-collapse">
                           <thead className="sticky top-0 z-10">
+                            {/* Linha 1 — cabeçalhos principais */}
                             <tr className="bg-muted border-b">
                               {intlColumns.map((c) => (
                                 <th key={c} className="text-left px-3 py-2 font-semibold whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground">
-                                  {c}
+                                  {colLabel(c)}
                                 </th>
                               ))}
                             </tr>
+                            {/* Linha 2 — sub-cabeçalhos da planilha (ex: 20', 40', 45') */}
+                            {intlSubHeaders.some((s) => s !== "") && (
+                              <tr className="bg-muted/60 border-b">
+                                {intlSubHeaders.map((s, i) => (
+                                  <th key={i} className="text-left px-3 py-1 text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+                                    {s}
+                                  </th>
+                                ))}
+                              </tr>
+                            )}
                           </thead>
                           <tbody>
                             {intlRows.map((row, i) => (
@@ -1253,6 +1419,11 @@ const Embarques = () => {
                                   const isValue = /valor|preco|price|frete|freight|taxa|usd/.test(norm);
                                   const isContainer = /container|modalidade/.test(norm);
                                   const isPo = /^po$/.test(norm.trim());
+                                  const isDate = isDateCol(c);
+                                  if (isDate && v) {
+                                    const d = formatDate(v);
+                                    if (d) return <td key={c} className="px-3 py-2 whitespace-nowrap">{d}</td>;
+                                  }
                                   if (isContainer && v) {
                                     const s = String(v);
                                     const sLow = s.toLowerCase();
