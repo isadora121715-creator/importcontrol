@@ -594,6 +594,9 @@ const Embarques = () => {
   // KPIs calculados dos dados filtrados (refletem todos os filtros ativos)
   const intlKpis = useMemo(() => {
     const rows = intlRowsFiltradas;
+    const hasFilter = intlFilterTipos.length > 0 || !!intlFilterPO ||
+      intlFilterExps.length > 0 || intlFilterAgentes.length > 0 || intlFilterMeses.length > 0;
+
     const containers = { "20ft": 0, "40ft": 0, "45ft": 0 };
     const modalidades = { LCL: 0, FCL: 0, Aereo: 0 };
     const agentesSet = new Set<string>();
@@ -624,7 +627,19 @@ const Embarques = () => {
         }
       }
     });
-    const totalContainers = containers["20ft"] + containers["40ft"] + containers["45ft"];
+
+    // Sem filtro ativo: usa totais oficiais da planilha como fonte autoritativa
+    const containersFinal = hasFilter ? containers : {
+      "20ft": intlTotals.cont20 || containers["20ft"],
+      "40ft": intlTotals.cont40 || containers["40ft"],
+      "45ft": intlTotals.cont45 || containers["45ft"],
+    };
+    const modalidadesFinal = hasFilter ? modalidades : {
+      LCL: modalidades.LCL,
+      FCL: modalidades.FCL,
+      Aereo: intlTotals.aereo || modalidades.Aereo,
+    };
+    const totalContainers = containersFinal["20ft"] + containersFinal["40ft"] + containersFinal["45ft"];
     const monthsList = Array.from(mesesSet).sort();
     const mediaContainers = monthsList.length > 0 ? totalContainers / monthsList.length : 0;
     const mediaKgMes = monthsList.length > 0 ? pesoTotal / monthsList.length : 0;
@@ -633,8 +648,8 @@ const Embarques = () => {
       containers: monthMap.get(mk)?.containers ?? 0,
       peso: monthMap.get(mk)?.peso ?? 0,
     }));
-    return { containers, modalidades, agentes: agentesSet.size, pesoTotal, valorTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
-  }, [intlRowsFiltradas, intlField]);
+    return { containers: containersFinal, modalidades: modalidadesFinal, agentes: agentesSet.size, pesoTotal, valorTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
+  }, [intlRowsFiltradas, intlField, intlTotals, intlFilterTipos, intlFilterPO, intlFilterExps, intlFilterAgentes, intlFilterMeses]);
 
   const formatBRLIntl = (v: number) =>
     `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
