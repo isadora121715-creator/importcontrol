@@ -607,9 +607,19 @@ const Embarques = () => {
     rows.forEach((r) => {
       const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
       const qtd = intlField.qtdContainer ? detectQty(r[intlField.qtdContainer]) || 1 : 1;
-      if (cont.includes("20")) containers["20ft"] += qtd;
-      else if (cont.includes("45")) containers["45ft"] += qtd;
-      else if (cont.includes("40")) containers["40ft"] += qtd;
+
+      if (intlField.container && cont) {
+        // Coluna de tipo como texto (ex: "FCL 40ft", "LCL")
+        if (cont.includes("20")) containers["20ft"] += qtd;
+        else if (cont.includes("45")) containers["45ft"] += qtd;
+        else if (cont.includes("40")) containers["40ft"] += qtd;
+      } else {
+        // Fallback: Col8/Col9/Col10 são colunas de quantidade direta por tamanho
+        containers["20ft"] += detectQty(r["Col8"]);
+        containers["40ft"] += detectQty(r["Col9"]);
+        containers["45ft"] += detectQty(r["Col10"]);
+      }
+
       if (cont.includes("lcl")) modalidades.LCL += 1;
       else if (cont.includes("aer") || cont.includes("air")) modalidades.Aereo += 1;
       else if (cont.includes("fcl") || cont.includes("20") || cont.includes("40") || cont.includes("45")) modalidades.FCL += 1;
@@ -628,17 +638,22 @@ const Embarques = () => {
       }
     });
 
-    // Sem filtro ativo: usa totais oficiais da planilha como fonte autoritativa
-    const containersFinal = hasFilter ? containers : {
-      "20ft": intlTotals.cont20 || containers["20ft"],
-      "40ft": intlTotals.cont40 || containers["40ft"],
-      "45ft": intlTotals.cont45 || containers["45ft"],
-    };
-    const modalidadesFinal = hasFilter ? modalidades : {
+    const computedTotal = containers["20ft"] + containers["40ft"] + containers["45ft"];
+    // Se nenhum filtro ativo E contagem calculada deu 0, usa totais oficiais da planilha
+    const containersFinal = (!hasFilter && computedTotal === 0) ? {
+      "20ft": intlTotals.cont20,
+      "40ft": intlTotals.cont40,
+      "45ft": intlTotals.cont45,
+    } : containers;
+    const modalidadesFinal = (!hasFilter && modalidades.FCL + modalidades.LCL + modalidades.Aereo === 0) ? {
+      LCL: 0,
+      FCL: 0,
+      Aereo: intlTotals.aereo,
+    } : (!hasFilter ? {
       LCL: modalidades.LCL,
       FCL: modalidades.FCL,
       Aereo: intlTotals.aereo || modalidades.Aereo,
-    };
+    } : modalidades);
     const totalContainers = containersFinal["20ft"] + containersFinal["40ft"] + containersFinal["45ft"];
     const monthsList = Array.from(mesesSet).sort();
     const mediaContainers = monthsList.length > 0 ? totalContainers / monthsList.length : 0;
