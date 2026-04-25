@@ -408,7 +408,7 @@ const Embarques = () => {
   const [intlFilterMeses, setIntlFilterMeses] = useState<string[]>([]);
   const [rotasVisiveis, setRotasVisiveis] = useState<number>(10);
 
-  const COL_NAME_MAP: Record<string, string> = { Col8: "20ft", Col9: "40ft", Col10: "45ft" };
+  const COL_NAME_MAP: Record<string, string> = { Col7: "20ft", Col8: "40ft", Col9: "45ft" };
   const colLabel = (c: string) => COL_NAME_MAP[c] ?? c;
 
   const intlField = useMemo(() => {
@@ -605,10 +605,10 @@ const Embarques = () => {
     const mesesSet = new Set<string>();
     const monthMap = new Map<string, { containers: number; peso: number }>();
     rows.forEach((r) => {
-      // Tamanho de container: sempre soma Col8=20ft, Col9=40ft, Col10=45ft (colunas de qtd direta)
-      containers["20ft"] += detectQty(r["Col8"]);
-      containers["40ft"] += detectQty(r["Col9"]);
-      containers["45ft"] += detectQty(r["Col10"]);
+      // Tamanho de container: Col7=20ft (col G), Col8=40ft (col H), Col9=45ft (col I), a partir linha 3
+      containers["20ft"] += detectQty(r["Col7"]);
+      containers["40ft"] += detectQty(r["Col8"]);
+      containers["45ft"] += detectQty(r["Col9"]);
 
       // Modalidade (tipo texto: FCL/LCL/Aéreo)
       const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
