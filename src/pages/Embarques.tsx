@@ -345,6 +345,11 @@ const Embarques = () => {
           const v = r[i];
           if (v !== undefined && v !== null && v !== "") obj[h] = v as string | number;
         });
+        // Guardar qtd de containers pelas colunas fixas G/H/I (índices 6/7/8)
+        // independente do nome do cabeçalho (célula mesclada, vazia, etc.)
+        if (r[6] !== undefined && r[6] !== null && r[6] !== "") obj["__qty20"] = r[6] as string | number;
+        if (r[7] !== undefined && r[7] !== null && r[7] !== "") obj["__qty40"] = r[7] as string | number;
+        if (r[8] !== undefined && r[8] !== null && r[8] !== "") obj["__qty45"] = r[8] as string | number;
         if (Object.keys(obj).length > 0) dataRows.push(obj);
       });
 
@@ -408,7 +413,7 @@ const Embarques = () => {
   const [intlFilterMeses, setIntlFilterMeses] = useState<string[]>([]);
   const [rotasVisiveis, setRotasVisiveis] = useState<number>(10);
 
-  const COL_NAME_MAP: Record<string, string> = { Col7: "20ft", Col8: "40ft", Col9: "45ft" };
+  const COL_NAME_MAP: Record<string, string> = { __qty20: "20ft", __qty40: "40ft", __qty45: "45ft" };
   const colLabel = (c: string) => COL_NAME_MAP[c] ?? c;
 
   const intlField = useMemo(() => {
@@ -605,10 +610,10 @@ const Embarques = () => {
     const mesesSet = new Set<string>();
     const monthMap = new Map<string, { containers: number; peso: number }>();
     rows.forEach((r) => {
-      // Tamanho de container: Col7=20ft (col G), Col8=40ft (col H), Col9=45ft (col I), a partir linha 3
-      containers["20ft"] += detectQty(r["Col7"]);
-      containers["40ft"] += detectQty(r["Col8"]);
-      containers["45ft"] += detectQty(r["Col9"]);
+      // Qtd containers por chave fixa (col G=20ft, H=40ft, I=45ft), a partir linha 3
+      containers["20ft"] += detectQty(r["__qty20"]);
+      containers["40ft"] += detectQty(r["__qty40"]);
+      containers["45ft"] += detectQty(r["__qty45"]);
 
       // Modalidade (tipo texto: FCL/LCL/Aéreo)
       const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
