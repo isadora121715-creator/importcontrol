@@ -608,12 +608,15 @@ const Embarques = () => {
     let pesoTotal = 0;
     let valorTotal = 0;
     const mesesSet = new Set<string>();
-    const monthMap = new Map<string, { containers: number; peso: number }>();
+    const monthMap = new Map<string, { containers: number; peso: number; qty20: number; qty40: number; qty45: number }>();
     rows.forEach((r) => {
       // Qtd containers por chave fixa (col G=20ft, H=40ft, I=45ft), a partir linha 3
-      containers["20ft"] += detectQty(r["__qty20"]);
-      containers["40ft"] += detectQty(r["__qty40"]);
-      containers["45ft"] += detectQty(r["__qty45"]);
+      const q20 = detectQty(r["__qty20"]);
+      const q40 = detectQty(r["__qty40"]);
+      const q45 = detectQty(r["__qty45"]);
+      containers["20ft"] += q20;
+      containers["40ft"] += q40;
+      containers["45ft"] += q45;
 
       // Modalidade (tipo texto: FCL/LCL/Aéreo)
       const cont = intlField.container ? String(r[intlField.container] ?? "").toLowerCase() : "";
@@ -629,9 +632,12 @@ const Embarques = () => {
         const mk = detectMonth(r[intlField.mes]);
         if (mk) {
           mesesSet.add(mk);
-          if (!monthMap.has(mk)) monthMap.set(mk, { containers: 0, peso: 0 });
+          if (!monthMap.has(mk)) monthMap.set(mk, { containers: 0, peso: 0, qty20: 0, qty40: 0, qty45: 0 });
           const m = monthMap.get(mk)!;
-          m.containers += qtd;
+          m.containers += q20 + q40 + q45 || qtd;
+          m.qty20 += q20;
+          m.qty40 += q40;
+          m.qty45 += q45;
           m.peso += intlField.peso ? detectQty(r[intlField.peso]) : 0;
         }
       }
@@ -656,6 +662,9 @@ const Embarques = () => {
     const detalhesPorMes = monthsList.map((mk) => ({
       mes: mk,
       containers: monthMap.get(mk)?.containers ?? 0,
+      qty20: monthMap.get(mk)?.qty20 ?? 0,
+      qty40: monthMap.get(mk)?.qty40 ?? 0,
+      qty45: monthMap.get(mk)?.qty45 ?? 0,
       peso: monthMap.get(mk)?.peso ?? 0,
     }));
     return { containers: containersFinal, modalidades: modalidadesFinal, agentes: agentesSet.size, pesoTotal, valorTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
@@ -1319,9 +1328,26 @@ const Embarques = () => {
                         </CardHeader>
                         <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {intlKpis.detalhesPorMes.map((d) => (
-                            <div key={d.mes} className="rounded-lg border-2 border-blue-500/40 p-3">
-                              <p className="text-xs font-semibold">{d.mes}</p>
-                              <p className="text-lg font-bold">{d.containers} containers</p>
+                            <div key={d.mes} className="rounded-lg border-2 border-blue-500/40 p-3 space-y-1">
+                              <p className="text-xs font-semibold uppercase tracking-wide">{d.mes}</p>
+                              <p className="text-base font-bold">{d.containers} containers</p>
+                              <div className="flex flex-wrap gap-1 pt-0.5">
+                                {d.qty20 > 0 && (
+                                  <span className="text-[11px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded px-1.5 py-0.5">
+                                    20ft: {d.qty20}
+                                  </span>
+                                )}
+                                {d.qty40 > 0 && (
+                                  <span className="text-[11px] font-medium bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded px-1.5 py-0.5">
+                                    40ft: {d.qty40}
+                                  </span>
+                                )}
+                                {d.qty45 > 0 && (
+                                  <span className="text-[11px] font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded px-1.5 py-0.5">
+                                    45ft: {d.qty45}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">{(d.peso / 1000).toFixed(1)}k kg</p>
                             </div>
                           ))}
