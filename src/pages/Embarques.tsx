@@ -695,113 +695,149 @@ const Embarques = () => {
   const [simQtd40, setSimQtd40] = useState("");
   const [simQtd45, setSimQtd45] = useState("");
 
-  // Capacidades reais de cada tipo de container
-  const CONTAINER_CAPS = useMemo(() => ({
-    FCL20: { cbm: 25,  kg: 21_600, baseUSD: 1_500 },
-    FCL40: { cbm: 58,  kg: 26_500, baseUSD: 2_500 },
-    FCL45: { cbm: 86,  kg: 27_600, baseUSD: 3_200 },
-  }), []);
+  // Dimensões internas reais (cm) + capacidades (ISO/indústria)
+  const TIPOS_FCL = [
+    {
+      id: "FCL20",   nome: "20ft Standard",
+      c: 589, l: 234, a: 239,   // comprimento × largura × altura interna (cm)
+      cbm: 28, maxKg: 21_700, baseUSD: 1_500,
+    },
+    {
+      id: "FCL40",   nome: "40ft Standard",
+      c: 1203, l: 234, a: 239,
+      cbm: 58, maxKg: 26_500, baseUSD: 2_500,
+    },
+    {
+      id: "FCL40HC", nome: "40ft High Cube",
+      c: 1203, l: 234, a: 270,  // HC: 30 cm mais alto
+      cbm: 72, maxKg: 26_460, baseUSD: 2_800,
+    },
+    {
+      id: "FCL45HC", nome: "45ft High Cube",
+      c: 1356, l: 234, a: 270,
+      cbm: 86, maxKg: 27_600, baseUSD: 3_200,
+    },
+  ] as const;
 
   const cotacoes = useMemo(() => {
-    const peso  = Number(pesoReal || 0);
-    let volume  = Number(cbm || 0);
-    if (!volume && comprimento && largura && altura) {
-      volume = (Number(comprimento) * Number(largura) * Number(altura)) / 1_000_000;
+    const peso = Number(pesoReal || 0);
+    const altCargo = Number(altura  || 0); // altura de 1 peça em cm
+    const larCargo = Number(largura || 0);
+    const compCargo = Number(comprimento || 0);
+    let volume = Number(cbm || 0);
+    if (!volume && compCargo && larCargo && altCargo) {
+      volume = (compCargo * larCargo * altCargo) / 1_000_000;
     }
-    const taxas = Number(taxasAdicionais || 0);
-    const USD   = 5; // câmbio mock
+    const taxas  = Number(taxasAdicionais || 0);
+    const USD    = 5.2; // câmbio referência BRL/USD
 
-    // --- LCL: cobrado por W/M (peso-tonelada ou CBM, o maior) ---
-    const wm      = Math.max(volume, peso / 1000);
-    const lclBase = wm * 500 * USD;
+    const temCarga = peso > 0 || volume > 0;
 
-    // --- FCL: calcula nº mínimo de containers e aproveitamento ---
-    const fclInfo = (cap: { cbm: number; kg: number; baseUSD: number }) => {
-      const n = peso > 0 || volume > 0
-        ? Math.max(1, Math.ceil(Math.max(
-            volume > 0 ? volume / cap.cbm : 0,
-            peso   > 0 ? peso   / cap.kg  : 0,
-          )))
-        : 1;
-      const utilizacao = Math.max(
-        volume > 0 ? volume / (n * cap.cbm) : 0,
-        peso   > 0 ? peso   / (n * cap.kg)  : 0,
-      );
-      const base = n * cap.baseUSD * USD;
-      return { n, utilizacao, base };
-    };
+    // ── LCL ──────────────────────────────────────────────────────────────
+    const wm      = Math.max(volume, peso / 1000);        // W/M (ton ou CBM)
+    const lclBase = wm * 520 * USD;                       // ~USD 520/W/M típico
 
-    const f20 = fclInfo(CONTAINER_CAPS.FCL20);
-    const f40 = fclInfo(CONTAINER_CAPS.FCL40);
-    const f45 = fclInfo(CONTAINER_CAPS.FCL45);
+    // ── FCL ──────────────────────────────────────────────────────────────
+    const fclOpcoes = TIPOS_FCL.map((spec) => {
+      // 1. Verificação física de dimensões (peça única)
+      const altaOk  = !altCargo  || altCargo  <= spec.a;
+      const largaOk = !larCargo  || larCargo  <= spec.l;
+      const compOk  = !compCargo || compCargo <= spec.c;
+      const cabeFisicamente = altaOk && largaOk && compOk;
 
-    // --- Aéreo: cobrado por kg (taxado ou real, o maior) ---
-    const pesoTaxado = Math.max(peso, volume * 167); // IATA: 1 CBM = 167 kg
-    const aereoBase  = pesoTaxado * 6 * USD;
+      // 2. Mínimo de containers necessários (volume E peso)
+      const n = !temCarga ? 1 : Math.max(1, Math.ceil(Math.max(
+        volume > 0 ? volume / spec.cbm : 0,
+        peso   > 0 ? peso   / spec.maxKg : 0,
+      )));
+
+      // 3. Aproveitamento real (limitado a 100 %)
+      const utilVol = volume > 0 ? volume / (n * spec.cbm)   : 0;
+      const utilKg  = peso   > 0 ? peso   / (n * spec.maxKg) : 0;
+      const util    = Math.min(Math.max(utilVol, utilKg), 1);
+
+      // 4. Alerta de sobrepeso por container
+      const sobrePeso = peso > 0 && peso / n > spec.maxKg;
+
+      const base = n * spec.baseUSD * USD;
+      const aviso = !cabeFisicamente
+        ? "⚠ Dimensão excede o container"
+        : sobrePeso
+        ? "⚠ Peso excede o limite"
+        : null;
+
+      return {
+        id: spec.id,
+        nome: spec.nome,
+        tipo: "Marítimo" as const,
+        base,
+        qtdContainers: n,
+        utilizacao: util,
+        cabeFisicamente,
+        aviso,
+        info: `${n}× ${spec.nome.replace(/ft.*/, "ft")} · ${Math.round(util * 100)}% cheio`,
+        pesoVolume: wm,
+        spec,
+      };
+    });
+
+    // ── Aéreo ─────────────────────────────────────────────────────────────
+    const pesoTaxado = Math.max(peso, volume * 167); // IATA: 1 m³ = 167 kg
+    const aereoBase  = pesoTaxado * 7.5 * USD;       // ~USD 7.5/kg taxado
 
     return [
       {
-        id: "LCL", nome: "LCL (W/M)", tipo: "Marítimo",
-        base: lclBase, qtdContainers: 0,
-        utilizacao: wm > 0 ? Math.min(wm / 15, 1) : 0, // LCL ideal até ~15 W/M
-        info: `${wm.toFixed(2)} W/M`,
-        pesoVolume: wm,
+        id: "LCL", nome: "LCL (Carga Parcial)", tipo: "Marítimo" as const,
+        base: lclBase, qtdContainers: 0, utilizacao: wm > 0 ? Math.min(wm / 15, 1) : 0,
+        cabeFisicamente: true, aviso: null,
+        info: `${wm.toFixed(2)} W/M`, pesoVolume: wm, spec: null,
       },
+      ...fclOpcoes,
       {
-        id: "FCL20", nome: "FCL 20ft", tipo: "Marítimo",
-        base: f20.base, qtdContainers: f20.n,
-        utilizacao: f20.utilizacao,
-        info: `${f20.n}x 20ft · ${(f20.utilizacao * 100).toFixed(0)}% cheio`,
-        pesoVolume: wm,
-      },
-      {
-        id: "FCL40", nome: "FCL 40ft", tipo: "Marítimo",
-        base: f40.base, qtdContainers: f40.n,
-        utilizacao: f40.utilizacao,
-        info: `${f40.n}x 40ft · ${(f40.utilizacao * 100).toFixed(0)}% cheio`,
-        pesoVolume: wm,
-      },
-      {
-        id: "FCL45", nome: "FCL 45ft HC", tipo: "Marítimo",
-        base: f45.base, qtdContainers: f45.n,
-        utilizacao: f45.utilizacao,
-        info: `${f45.n}x 45ft · ${(f45.utilizacao * 100).toFixed(0)}% cheio`,
-        pesoVolume: wm,
-      },
-      {
-        id: "AEREO", nome: "Aéreo", tipo: "Aéreo",
-        base: aereoBase, qtdContainers: 0,
-        utilizacao: 0,
-        info: `${pesoTaxado.toFixed(0)} kg taxado`,
-        pesoVolume: wm,
+        id: "AEREO", nome: "Aéreo", tipo: "Aéreo" as const,
+        base: aereoBase, qtdContainers: 0, utilizacao: 0,
+        cabeFisicamente: true, aviso: null,
+        info: `${pesoTaxado.toFixed(0)} kg taxado`, pesoVolume: wm, spec: null,
       },
     ].map((o) => ({ ...o, total: o.base + taxas, taxas }));
-  }, [pesoReal, cbm, comprimento, largura, altura, taxasAdicionais, CONTAINER_CAPS]);
+  }, [pesoReal, cbm, comprimento, largura, altura, taxasAdicionais]);
 
   const melhor = useMemo(() => {
-    const validas = cotacoes.filter((o) => o.base > 0);
-    if (validas.length === 0) return null;
-    const maxTotal = Math.max(...validas.map((o) => o.total));
+    // Nunca recomendar aéreo automaticamente
+    const candidatos = cotacoes.filter((o) => o.base > 0 && o.id !== "AEREO");
+    if (candidatos.length === 0) return null;
 
-    // Score: quanto menor melhor
-    // FCL: prioriza menos containers > alto aproveitamento > menor custo
-    // LCL: bom para cargas pequenas (< 15 W/M)
-    // Aéreo: nunca recomendado automaticamente (penalidade alta)
-    const score = (o: typeof validas[0]) => {
-      if (o.id === "AEREO") return 1_000_000;
+    const maxTotal = Math.max(...candidatos.map((o) => o.total));
+
+    /**
+     * Regras de recomendação (score menor = melhor):
+     *  1. Se cargo não cabe fisicamente → descarta
+     *  2. LCL: preferível só para cargas pequenas (< 10 W/M, < 5 t)
+     *     caso contrário FCL ganha
+     *  3. FCL: prioridade — menor nº de containers > maior aproveitamento > menor custo
+     *     Um container com 60% de aproveitamento é MELHOR que dois com 90%.
+     */
+    const score = (o: typeof candidatos[0]): number => {
+      if (!o.cabeFisicamente) return 999_999;
       if (o.id === "LCL") {
-        // preferível apenas se carga pequena
-        const pequena = o.pesoVolume < 15;
-        return pequena ? o.total / maxTotal * 50 : 300 + o.total / maxTotal * 50;
+        const pequena = o.pesoVolume > 0 && o.pesoVolume < 10;
+        return pequena ? 5_000 + (o.total / maxTotal) * 500 : 50_000;
       }
-      // FCL: penaliza mais containers e baixo aproveitamento
-      return o.qtdContainers * 1000 + (1 - Math.min(o.utilizacao, 1)) * 500 + o.total / maxTotal * 50;
+      // FCL: cada container adicional custa 10 000 pontos (nunca paga compensar)
+      const penQtd  = o.qtdContainers * 10_000;
+      // Aproveitamento ideal entre 60-95%: fora disso penaliza suavemente
+      const util    = o.utilizacao;
+      const penUtil = util < 0.60 ? (0.60 - util) * 3_000   // container muito vazio
+                    : util > 0.95 ? (util - 0.95)  * 1_000   // quase sobrecarregado
+                    : 0;
+      const penCusto = (o.total / maxTotal) * 300;
+      return penQtd + penUtil + penCusto;
     };
 
-    return validas.reduce((best, cur) => score(cur) < score(best) ? cur : best);
+    return candidatos.reduce((best, cur) => score(cur) < score(best) ? cur : best);
   }, [cotacoes]);
 
-  // Auto-preenche qtd de containers quando cargo muda
+  // Auto-preenche qtd de containers com specs reais quando cargo muda
   useEffect(() => {
     const peso   = Number(pesoReal || 0);
     let volume   = Number(cbm || 0);
@@ -813,13 +849,13 @@ const Embarques = () => {
       return;
     }
     const calc = (capCbm: number, capKg: number) =>
-      Math.max(1, Math.ceil(Math.max(
+      String(Math.max(1, Math.ceil(Math.max(
         volume > 0 ? volume / capCbm : 0,
         peso   > 0 ? peso   / capKg  : 0,
-      )));
-    setSimQtd20(String(calc(25, 21_600)));
-    setSimQtd40(String(calc(58, 26_500)));
-    setSimQtd45(String(calc(86, 27_600)));
+      ))));
+    setSimQtd20(calc(28, 21_700));   // 20ft Standard
+    setSimQtd40(calc(58, 26_500));   // 40ft Standard
+    setSimQtd45(calc(86, 27_600));   // 45ft HC
   }, [pesoReal, cbm, comprimento, largura, altura]);
 
   const containerObs = useMemo(() => {
@@ -1828,21 +1864,23 @@ const Embarques = () => {
               </CardHeader>
               <CardContent>
                 {melhor ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     {cotacoes.map((o) => {
                       const isBest = melhor && o.id === melhor.id;
-                      const util = o.utilizacao;
-                      const utilPct = Math.round(Math.min(util, 1) * 100);
+                      const utilPct = Math.round(Math.min(o.utilizacao, 1) * 100);
                       const utilColor =
-                        utilPct >= 80 ? "bg-green-500" :
-                        utilPct >= 50 ? "bg-yellow-400" :
-                        utilPct >  0  ? "bg-orange-400" : "bg-muted";
+                        !o.cabeFisicamente    ? "bg-destructive" :
+                        utilPct >= 80         ? "bg-green-500"   :
+                        utilPct >= 60         ? "bg-yellow-400"  :
+                        utilPct >  0          ? "bg-orange-400"  : "bg-muted";
+                      const isFCL = o.id !== "AEREO" && o.id !== "LCL";
                       return (
                         <div
                           key={o.id}
                           className={cn(
                             "rounded-lg border p-4 space-y-2 relative",
-                            isBest && "border-primary bg-primary/5",
+                            isBest         && "border-primary bg-primary/5",
+                            !o.cabeFisicamente && "opacity-60 border-destructive/50",
                           )}
                         >
                           {isBest && (
@@ -1850,26 +1888,39 @@ const Embarques = () => {
                               MELHOR OPÇÃO
                             </span>
                           )}
-                          <p className="text-sm font-semibold">{o.nome}</p>
+
+                          <p className="text-sm font-semibold leading-tight">{o.nome}</p>
+
+                          {/* Dimensões internas (apenas FCL) */}
+                          {"spec" in o && o.spec && (
+                            <p className="text-[10px] text-muted-foreground leading-tight">
+                              {o.spec.c}×{o.spec.l}×{o.spec.a} cm · {o.spec.cbm} m³ · {(o.spec.maxKg / 1000).toFixed(1)} t
+                            </p>
+                          )}
 
                           {/* Barra de aproveitamento */}
-                          {o.id !== "AEREO" && o.id !== "LCL" && (
+                          {isFCL && (
                             <div className="space-y-0.5">
                               <div className="flex justify-between text-[10px] text-muted-foreground">
                                 <span>Aproveitamento</span>
-                                <span>{utilPct}%</span>
+                                <span className={o.cabeFisicamente ? "" : "text-destructive font-semibold"}>
+                                  {o.aviso ?? `${utilPct}%`}
+                                </span>
                               </div>
                               <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                <div className={cn("h-full rounded-full transition-all", utilColor)} style={{ width: `${Math.min(utilPct, 100)}%` }} />
+                                <div
+                                  className={cn("h-full rounded-full transition-all", utilColor)}
+                                  style={{ width: `${o.cabeFisicamente ? Math.min(utilPct, 100) : 100}%` }}
+                                />
                               </div>
                             </div>
                           )}
 
                           <div className="text-xs space-y-1 pt-1">
                             {o.info && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Detalhe</span>
-                                <span className="font-medium">{o.info}</span>
+                              <div className="flex justify-between gap-2">
+                                <span className="text-muted-foreground shrink-0">Detalhe</span>
+                                <span className="font-medium text-right">{o.info}</span>
                               </div>
                             )}
                             <div className="flex justify-between">
@@ -1881,7 +1932,7 @@ const Embarques = () => {
                               <span>R$ {o.taxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between font-semibold pt-1 border-t">
-                              <span>Total</span>
+                              <span>Total Est.</span>
                               <span className="text-primary">
                                 R$ {o.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                               </span>
@@ -1891,8 +1942,9 @@ const Embarques = () => {
                             size="sm"
                             variant={isBest ? "default" : "outline"}
                             className="w-full mt-2"
+                            disabled={!o.cabeFisicamente}
                           >
-                            Fechar este Frete
+                            {o.cabeFisicamente ? "Fechar este Frete" : "Não compatível"}
                           </Button>
                         </div>
                       );
