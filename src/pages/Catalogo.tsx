@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,26 +38,108 @@ function fmtPreco(val: number | null): string {
   });
 }
 
-function exportCSV(items: CatalogoItem[]) {
-  const header = ["Código", "Descrição", "Preço Compra (USD)", "Fornecedores", "Categorias", "Última Atualização"];
-  const rows = items.map((i) => [
-    i.codigo,
-    i.descricao,
-    i.precoCompra ?? "",
-    i.fornecedores.join("; "),
-    i.categorias.join("; "),
-    i.ultimaAtualizacao,
+function exportExcel(items: CatalogoItem[]) {
+  // ── 1. Build data rows ──────────────────────────────────────────────────
+  const headerRow = [
+    "Código",
+    "Descrição",
+    "Preço Compra (USD)",
+    "Fornecedores",
+    "Categorias",
+    "Última Atualização",
+  ];
+
+  const dataRows = items.map((i) => [
+    i.codigo || "",
+    i.descricao || "",
+    i.precoCompra ?? "",           // number → Excel numeric cell
+    i.fornecedores.join("\n") || "",   // one supplier per line inside the cell
+    i.categorias.join("\n") || "",
+    i.ultimaAtualizacao
+      ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR")
+      : "",
   ]);
-  const csv = [header, ...rows]
-    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "catalogo_materiais.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+
+  // ── 2. Create worksheet ─────────────────────────────────────────────────
+  const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+
+  // ── 3. Column widths ────────────────────────────────────────────────────
+  ws["!cols"] = [
+    { wch: 18 },   // Código
+    { wch: 52 },   // Descrição
+    { wch: 20 },   // Preço
+    { wch: 30 },   // Fornecedores
+    { wch: 18 },   // Categorias
+    { wch: 20 },   // Última Atualização
+  ];
+
+  // ── 4. Row heights: header taller, data rows allow wrap ─────────────────
+  const rowHeights: XLSX.RowInfo[] = [{ hpt: 28 }]; // header row
+  dataRows.forEach((row) => {
+    const maxLines = Math.max(
+      String(row[3]).split("\n").length,   // fornecedores lines
+      String(row[4]).split("\n").length,   // categorias lines
+      1,
+    );
+    rowHeights.push({ hpt: Math.max(18, maxLines * 16) });
+  });
+  ws["!rows"] = rowHeights;
+
+  // ── 5. Style header cells (bold + background) ───────────────────────────
+  const totalCols = headerRow.length;
+  for (let c = 0; c < totalCols; c++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c });
+    if (!ws[addr]) continue;
+    ws[addr].s = {
+      font:    { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+      fill:    { fgColor: { rgb: "1E3A5F" } },
+      alignment: { horizontal: "center", vertical: "center", wrapText: true },
+      border: {
+        bottom: { style: "thin", color: { rgb: "AAAAAA" } },
+      },
+    };
+  }
+
+  // ── 6. Style data cells ─────────────────────────────────────────────────
+  for (let r = 1; r <= dataRows.length; r++) {
+    const isEven = r % 2 === 0;
+    const bgRgb  = isEven ? "F3F6FB" : "FFFFFF";
+
+    for (let c = 0; c < totalCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[addr]) {
+        // ensure empty cells still get style
+        ws[addr] = { t: "z", v: "" };
+      }
+      const isPrice = c === 2;
+      ws[addr].s = {
+        font:      { sz: 10 },
+        fill:      { fgColor: { rgb: bgRgb } },
+        alignment: {
+          horizontal: isPrice ? "right" : "left",
+          vertical:   "center",
+          wrapText:   true,
+        },
+        border: {
+          bottom: { style: "hair", color: { rgb: "DDDDDD" } },
+        },
+      };
+      // format price column as number with 2 decimals
+      if (isPrice && typeof ws[addr].v === "number") {
+        ws[addr].z = '#,##0.00 "USD"';
+      }
+    }
+  }
+
+  // ── 7. Freeze header row ────────────────────────────────────────────────
+  ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activeCell: "A2" };
+
+  // ── 8. Write workbook ───────────────────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Catálogo");
+
+  const date = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `catalogo_materiais_${date}.xlsx`);
 }
 
 const CATEGORIA_COLORS: Record<string, string> = {
@@ -231,9 +314,9 @@ export default function Catalogo() {
               <RefreshCw className="h-4 w-4 mr-1" />
               Recarregar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportCSV(filtered)}>
+            <Button variant="outline" size="sm" onClick={() => exportExcel(filtered)}>
               <Download className="h-4 w-4 mr-1" />
-              Exportar CSV
+              Exportar Excel
             </Button>
             <Button size="sm" onClick={openAdd}>
               <Plus className="h-4 w-4 mr-1" />
