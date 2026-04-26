@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Landing from "@/pages/Landing";
 import Index from "@/pages/Index";
 import Geral from "@/pages/Geral";
+import Precificacao from "@/pages/Precificacao";
 import Embarques from "@/pages/Embarques";
 import Compras from "@/pages/Compras";
 import Vendas from "@/pages/Vendas";
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/dashboard" element={<Index />} />
               <Route path="/geral" element={<Geral />} />
+              <Route path="/precificacao" element={<Precificacao />} />
               <Route path="/compras" element={<Compras />} />
               <Route path="/vendas" element={<Vendas />} />
               <Route path="/embarques" element={<Embarques />} />
