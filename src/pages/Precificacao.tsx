@@ -80,29 +80,49 @@ export default function Precificacao() {
 
   const removeItem = (id: string) => saveItems(vendaItems.filter((i) => i.id !== id));
 
-  // ── Calculadora de Margem ─────────────────────────────────────────────
-  const [calcPrecoVenda,   setCalcPrecoVenda]   = useState("");
-  const [calcPrecoCompra,  setCalcPrecoCompra]  = useState("");
-  const [calcCambio,       setCalcCambio]       = useState("5.20");
-  const [calcFrete,        setCalcFrete]        = useState("");
-  const [calcImposto,      setCalcImposto]      = useState("");
+  // ── Calculadora de Margem — Modo A: tenho o preço de VENDA ───────────
+  const [modoA_venda,   setModoA_venda]   = useState(""); // R$/un
+  const [modoA_cambio,  setModoA_cambio]  = useState("5.20");
+  const [modoA_frete,   setModoA_frete]   = useState("");
+  const [modoA_imposto, setModoA_imposto] = useState("");
 
-  const calcMargem = useMemo(() => {
-    const venda   = Number(calcPrecoVenda)  || 0;
-    const compra  = Number(calcPrecoCompra) || 0;
-    const cambio  = Number(calcCambio)      || 5.20;
-    const frete   = Number(calcFrete)       || 0;
-    const imposto = Number(calcImposto)     || 0;
-    if (!venda || !compra) return null;
+  const resultA = useMemo(() => {
+    const venda   = Number(modoA_venda)   || 0;
+    const cambio  = Number(modoA_cambio)  || 5.20;
+    const frete   = Number(modoA_frete)   || 0;
+    const imposto = Number(modoA_imposto) || 0;
+    const mg      = Number(vendaMargem)   || 18;
+    if (!venda) return null;
 
-    const custoUSD = compra + frete;
-    const custoBRL = custoUSD * cambio * (1 + imposto / 100);
-    const lucro    = venda - custoBRL;
-    const margemSV = (lucro / venda)  * 100;   // margem sobre venda
-    const markup   = (lucro / custoBRL) * 100; // markup sobre custo
-    const ok       = margemSV >= (Number(vendaMargem) || 18);
-    return { custoBRL, lucro, margemSV, markup, ok };
-  }, [calcPrecoVenda, calcPrecoCompra, calcCambio, calcFrete, calcImposto, vendaMargem]);
+    // Custo máximo em BRL para atingir a margem alvo
+    const custoMaxBRL = venda * (1 - mg / 100);
+    // Custo máximo em USD antes de impostos e frete
+    const custoMaxUSD = custoMaxBRL / (cambio * (1 + imposto / 100));
+    // Preço de compra máximo descontando frete
+    const compraMaxUSD = custoMaxUSD - frete;
+    const lucro = venda - custoMaxBRL;
+    return { venda, custoMaxBRL, custoMaxUSD, compraMaxUSD, lucro, mg };
+  }, [modoA_venda, modoA_cambio, modoA_frete, modoA_imposto, vendaMargem]);
+
+  // ── Calculadora de Margem — Modo B: tenho o preço de COMPRA ──────────
+  const [modoB_compra,  setModoB_compra]  = useState(""); // USD/un
+  const [modoB_cambio,  setModoB_cambio]  = useState("5.20");
+  const [modoB_frete,   setModoB_frete]   = useState("");
+  const [modoB_imposto, setModoB_imposto] = useState("");
+
+  const resultB = useMemo(() => {
+    const compra  = Number(modoB_compra)  || 0;
+    const cambio  = Number(modoB_cambio)  || 5.20;
+    const frete   = Number(modoB_frete)   || 0;
+    const imposto = Number(modoB_imposto) || 0;
+    const mg      = Number(vendaMargem)   || 18;
+    if (!compra) return null;
+
+    const custoBRL    = (compra + frete) * cambio * (1 + imposto / 100);
+    const vendaMinBRL = custoBRL / (1 - mg / 100);
+    const lucro       = vendaMinBRL - custoBRL;
+    return { compra, custoBRL, vendaMinBRL, lucro, mg };
+  }, [modoB_compra, modoB_cambio, modoB_frete, modoB_imposto, vendaMargem]);
 
   const margem = Number(vendaMargem) || 18;
   const calcs  = vendaItems.map((item) => ({ item, c: calcVenda(item, margem) }));
@@ -127,100 +147,161 @@ export default function Precificacao() {
           </div>
         </div>
 
-        {/* ── Calculadora de Margem de Compra ────────────────────────── */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Percent className="h-5 w-5" /> Calculadora de Margem de Compra
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Informe o preço de venda e os custos para calcular a margem obtida na compra
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Preço de Venda (R$/un)</label>
-                <Input
-                  type="number" min="0" placeholder="0,00"
-                  value={calcPrecoVenda}
-                  onChange={(e) => setCalcPrecoVenda(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Preço de Compra (USD/un)</label>
-                <Input
-                  type="number" min="0" placeholder="0.00"
-                  value={calcPrecoCompra}
-                  onChange={(e) => setCalcPrecoCompra(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Câmbio (R$/USD)</label>
-                <Input
-                  type="number" min="0" step="0.01" placeholder="5.20"
-                  value={calcCambio}
-                  onChange={(e) => setCalcCambio(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Frete (USD/un)</label>
-                <Input
-                  type="number" min="0" placeholder="0.00"
-                  value={calcFrete}
-                  onChange={(e) => setCalcFrete(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Impostos / Despesas (%)</label>
-                <Input
-                  type="number" min="0" placeholder="0"
-                  value={calcImposto}
-                  onChange={(e) => setCalcImposto(e.target.value)}
-                />
-              </div>
-            </div>
+        {/* ── Calculadora de Margem ───────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-            {calcMargem ? (
-              <div className={cn(
-                "grid grid-cols-2 md:grid-cols-4 gap-3 rounded-lg border p-4",
-                calcMargem.ok ? "border-green-400 bg-green-50 dark:bg-green-950/20" : "border-red-400 bg-red-50 dark:bg-red-950/20"
-              )}>
-                <div>
-                  <p className="text-xs text-muted-foreground">Custo total (R$/un)</p>
-                  <p className="text-xl font-bold">
-                    {calcMargem.custoBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                  </p>
+          {/* MODO A — Sei o preço de VENDA, quero saber o máximo de compra */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Percent className="h-4 w-4 text-blue-500" />
+                Tenho o preço de venda
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Por quanto posso comprar para ter {margem}% de margem?
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground mb-1 block">Preço de Venda (R$/un)</label>
+                  <Input type="number" min="0" placeholder="Ex: 10,00"
+                    value={modoA_venda}
+                    onChange={(e) => setModoA_venda(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Lucro bruto (R$/un)</p>
-                  <p className={cn("text-xl font-bold", calcMargem.lucro >= 0 ? "text-green-600 dark:text-green-400" : "text-destructive")}>
-                    {calcMargem.lucro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                  </p>
+                  <label className="text-xs text-muted-foreground mb-1 block">Câmbio (R$/USD)</label>
+                  <Input type="number" min="0" step="0.01" placeholder="5.20"
+                    value={modoA_cambio}
+                    onChange={(e) => setModoA_cambio(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Margem sobre venda</p>
-                  <p className={cn("text-2xl font-bold", calcMargem.ok ? "text-green-600 dark:text-green-400" : "text-destructive")}>
-                    {calcMargem.margemSV.toFixed(2)}%
-                    <span className="text-xs font-normal ml-1 text-muted-foreground">
-                      (mín. {margem}%)
-                    </span>
-                  </p>
+                  <label className="text-xs text-muted-foreground mb-1 block">Frete (USD/un)</label>
+                  <Input type="number" min="0" placeholder="0.00"
+                    value={modoA_frete}
+                    onChange={(e) => setModoA_frete(e.target.value)}
+                  />
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Markup sobre custo</p>
-                  <p className={cn("text-2xl font-bold", calcMargem.markup >= 0 ? "text-foreground" : "text-destructive")}>
-                    {calcMargem.markup.toFixed(2)}%
-                  </p>
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground mb-1 block">Impostos / Despesas (%)</label>
+                  <Input type="number" min="0" placeholder="0"
+                    value={modoA_imposto}
+                    onChange={(e) => setModoA_imposto(e.target.value)}
+                  />
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-3">
-                Preencha o preço de venda e o preço de compra para calcular a margem
+
+              {resultA ? (
+                <div className="rounded-lg border border-blue-400 bg-blue-50 dark:bg-blue-950/20 p-4 space-y-2">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs text-muted-foreground">Custo máximo (R$/un)</span>
+                    <span className="font-semibold">
+                      {resultA.custoMaxBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs text-muted-foreground">Custo máximo (USD/un)</span>
+                    <span className="font-semibold">
+                      $ {resultA.custoMaxUSD.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between items-baseline">
+                    <span className="text-xs font-semibold text-muted-foreground">Compra máxima (USD/un)</span>
+                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                      $ {resultA.compraMaxUSD > 0 ? resultA.compraMaxUSD.toFixed(2) : "—"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground text-center pt-1">
+                    Lucro estimado:{" "}
+                    {resultA.lucro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    {" "}· margem {resultA.mg}%
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  Preencha o preço de venda para calcular
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* MODO B — Sei o preço de COMPRA, quero saber o mínimo de venda */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Percent className="h-4 w-4 text-green-500" />
+                Tenho o preço de compra
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Por quanto preciso vender para ter {margem}% de margem?
               </p>
-            )}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground mb-1 block">Preço de Compra (USD/un)</label>
+                  <Input type="number" min="0" placeholder="Ex: 10.00"
+                    value={modoB_compra}
+                    onChange={(e) => setModoB_compra(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Câmbio (R$/USD)</label>
+                  <Input type="number" min="0" step="0.01" placeholder="5.20"
+                    value={modoB_cambio}
+                    onChange={(e) => setModoB_cambio(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Frete (USD/un)</label>
+                  <Input type="number" min="0" placeholder="0.00"
+                    value={modoB_frete}
+                    onChange={(e) => setModoB_frete(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground mb-1 block">Impostos / Despesas (%)</label>
+                  <Input type="number" min="0" placeholder="0"
+                    value={modoB_imposto}
+                    onChange={(e) => setModoB_imposto(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {resultB ? (
+                <div className="rounded-lg border border-green-400 bg-green-50 dark:bg-green-950/20 p-4 space-y-2">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs text-muted-foreground">Custo total (R$/un)</span>
+                    <span className="font-semibold">
+                      {resultB.custoBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs text-muted-foreground">Lucro estimado (R$/un)</span>
+                    <span className="font-semibold text-green-600 dark:text-green-400">
+                      {resultB.lucro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between items-baseline">
+                    <span className="text-xs font-semibold text-muted-foreground">Venda mínima (R$/un)</span>
+                    <span className="text-xl font-bold text-green-600 dark:text-green-400">
+                      {resultB.vendaMinBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground text-center pt-1">
+                    Margem sobre venda: {resultB.mg}%
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  Preencha o preço de compra para calcular
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         {/* KPI totais */}
         {vendaItems.length > 0 && (
