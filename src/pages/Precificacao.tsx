@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { DollarSign, Trash2, TrendingUp } from "lucide-react";
+import { useMemo, useState } from "react";
+import { DollarSign, Percent, Trash2, TrendingUp } from "lucide-react";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -80,6 +80,30 @@ export default function Precificacao() {
 
   const removeItem = (id: string) => saveItems(vendaItems.filter((i) => i.id !== id));
 
+  // ── Calculadora de Margem ─────────────────────────────────────────────
+  const [calcPrecoVenda,   setCalcPrecoVenda]   = useState("");
+  const [calcPrecoCompra,  setCalcPrecoCompra]  = useState("");
+  const [calcCambio,       setCalcCambio]       = useState("5.20");
+  const [calcFrete,        setCalcFrete]        = useState("");
+  const [calcImposto,      setCalcImposto]      = useState("");
+
+  const calcMargem = useMemo(() => {
+    const venda   = Number(calcPrecoVenda)  || 0;
+    const compra  = Number(calcPrecoCompra) || 0;
+    const cambio  = Number(calcCambio)      || 5.20;
+    const frete   = Number(calcFrete)       || 0;
+    const imposto = Number(calcImposto)     || 0;
+    if (!venda || !compra) return null;
+
+    const custoUSD = compra + frete;
+    const custoBRL = custoUSD * cambio * (1 + imposto / 100);
+    const lucro    = venda - custoBRL;
+    const margemSV = (lucro / venda)  * 100;   // margem sobre venda
+    const markup   = (lucro / custoBRL) * 100; // markup sobre custo
+    const ok       = margemSV >= (Number(vendaMargem) || 18);
+    return { custoBRL, lucro, margemSV, markup, ok };
+  }, [calcPrecoVenda, calcPrecoCompra, calcCambio, calcFrete, calcImposto, vendaMargem]);
+
   const margem = Number(vendaMargem) || 18;
   const calcs  = vendaItems.map((item) => ({ item, c: calcVenda(item, margem) }));
   const totalCusto    = calcs.reduce((s, { c }) => s + c.custoTotalBRL, 0);
@@ -102,6 +126,101 @@ export default function Precificacao() {
             </p>
           </div>
         </div>
+
+        {/* ── Calculadora de Margem de Compra ────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Percent className="h-5 w-5" /> Calculadora de Margem de Compra
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Informe o preço de venda e os custos para calcular a margem obtida na compra
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Preço de Venda (R$/un)</label>
+                <Input
+                  type="number" min="0" placeholder="0,00"
+                  value={calcPrecoVenda}
+                  onChange={(e) => setCalcPrecoVenda(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Preço de Compra (USD/un)</label>
+                <Input
+                  type="number" min="0" placeholder="0.00"
+                  value={calcPrecoCompra}
+                  onChange={(e) => setCalcPrecoCompra(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Câmbio (R$/USD)</label>
+                <Input
+                  type="number" min="0" step="0.01" placeholder="5.20"
+                  value={calcCambio}
+                  onChange={(e) => setCalcCambio(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Frete (USD/un)</label>
+                <Input
+                  type="number" min="0" placeholder="0.00"
+                  value={calcFrete}
+                  onChange={(e) => setCalcFrete(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Impostos / Despesas (%)</label>
+                <Input
+                  type="number" min="0" placeholder="0"
+                  value={calcImposto}
+                  onChange={(e) => setCalcImposto(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {calcMargem ? (
+              <div className={cn(
+                "grid grid-cols-2 md:grid-cols-4 gap-3 rounded-lg border p-4",
+                calcMargem.ok ? "border-green-400 bg-green-50 dark:bg-green-950/20" : "border-red-400 bg-red-50 dark:bg-red-950/20"
+              )}>
+                <div>
+                  <p className="text-xs text-muted-foreground">Custo total (R$/un)</p>
+                  <p className="text-xl font-bold">
+                    {calcMargem.custoBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Lucro bruto (R$/un)</p>
+                  <p className={cn("text-xl font-bold", calcMargem.lucro >= 0 ? "text-green-600 dark:text-green-400" : "text-destructive")}>
+                    {calcMargem.lucro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Margem sobre venda</p>
+                  <p className={cn("text-2xl font-bold", calcMargem.ok ? "text-green-600 dark:text-green-400" : "text-destructive")}>
+                    {calcMargem.margemSV.toFixed(2)}%
+                    <span className="text-xs font-normal ml-1 text-muted-foreground">
+                      (mín. {margem}%)
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Markup sobre custo</p>
+                  <p className={cn("text-2xl font-bold", calcMargem.markup >= 0 ? "text-foreground" : "text-destructive")}>
+                    {calcMargem.markup.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-3">
+                Preencha o preço de venda e o preço de compra para calcular a margem
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* KPI totais */}
         {vendaItems.length > 0 && (
