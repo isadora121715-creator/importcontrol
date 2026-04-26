@@ -695,36 +695,132 @@ const Embarques = () => {
   const [simQtd40, setSimQtd40] = useState("");
   const [simQtd45, setSimQtd45] = useState("");
 
+  // Capacidades reais de cada tipo de container
+  const CONTAINER_CAPS = useMemo(() => ({
+    FCL20: { cbm: 25,  kg: 21_600, baseUSD: 1_500 },
+    FCL40: { cbm: 58,  kg: 26_500, baseUSD: 2_500 },
+    FCL45: { cbm: 86,  kg: 27_600, baseUSD: 3_200 },
+  }), []);
+
   const cotacoes = useMemo(() => {
-    const peso = Number(pesoReal || 0);
-    let volume = Number(cbm || 0);
+    const peso  = Number(pesoReal || 0);
+    let volume  = Number(cbm || 0);
     if (!volume && comprimento && largura && altura) {
-      volume =
-        (Number(comprimento) * Number(largura) * Number(altura)) / 1_000_000;
+      volume = (Number(comprimento) * Number(largura) * Number(altura)) / 1_000_000;
     }
-    const pesoVolume = Math.max(peso / 1000, volume); // ton
     const taxas = Number(taxasAdicionais || 0);
+    const USD   = 5; // câmbio mock
 
-    const lclBase = pesoVolume * 500 * 5; // mock conversion
-    const fcl20Base = 1500 * 5;
-    const fcl40Base = 2500 * 5;
-    const aereoBase = peso * 6 * 5;
+    // --- LCL: cobrado por W/M (peso-tonelada ou CBM, o maior) ---
+    const wm      = Math.max(volume, peso / 1000);
+    const lclBase = wm * 500 * USD;
 
-    const opcoes = [
-      { id: "LCL", nome: "LCL (TON)", base: lclBase, tipo: "Marítimo" },
-      { id: "FCL20", nome: "FCL 20ft", base: fcl20Base, tipo: "Marítimo" },
-      { id: "FCL40", nome: "FCL 40ft", base: fcl40Base, tipo: "Marítimo" },
-      { id: "AEREO", nome: "Aéreo", base: aereoBase, tipo: "Aéreo" },
-    ].map((o) => ({ ...o, total: o.base + taxas, taxas, pesoVolume }));
+    // --- FCL: calcula nº mínimo de containers e aproveitamento ---
+    const fclInfo = (cap: { cbm: number; kg: number; baseUSD: number }) => {
+      const n = peso > 0 || volume > 0
+        ? Math.max(1, Math.ceil(Math.max(
+            volume > 0 ? volume / cap.cbm : 0,
+            peso   > 0 ? peso   / cap.kg  : 0,
+          )))
+        : 1;
+      const utilizacao = Math.max(
+        volume > 0 ? volume / (n * cap.cbm) : 0,
+        peso   > 0 ? peso   / (n * cap.kg)  : 0,
+      );
+      const base = n * cap.baseUSD * USD;
+      return { n, utilizacao, base };
+    };
 
-    return opcoes;
-  }, [pesoReal, cbm, comprimento, largura, altura, taxasAdicionais]);
+    const f20 = fclInfo(CONTAINER_CAPS.FCL20);
+    const f40 = fclInfo(CONTAINER_CAPS.FCL40);
+    const f45 = fclInfo(CONTAINER_CAPS.FCL45);
+
+    // --- Aéreo: cobrado por kg (taxado ou real, o maior) ---
+    const pesoTaxado = Math.max(peso, volume * 167); // IATA: 1 CBM = 167 kg
+    const aereoBase  = pesoTaxado * 6 * USD;
+
+    return [
+      {
+        id: "LCL", nome: "LCL (W/M)", tipo: "Marítimo",
+        base: lclBase, qtdContainers: 0,
+        utilizacao: wm > 0 ? Math.min(wm / 15, 1) : 0, // LCL ideal até ~15 W/M
+        info: `${wm.toFixed(2)} W/M`,
+        pesoVolume: wm,
+      },
+      {
+        id: "FCL20", nome: "FCL 20ft", tipo: "Marítimo",
+        base: f20.base, qtdContainers: f20.n,
+        utilizacao: f20.utilizacao,
+        info: `${f20.n}x 20ft · ${(f20.utilizacao * 100).toFixed(0)}% cheio`,
+        pesoVolume: wm,
+      },
+      {
+        id: "FCL40", nome: "FCL 40ft", tipo: "Marítimo",
+        base: f40.base, qtdContainers: f40.n,
+        utilizacao: f40.utilizacao,
+        info: `${f40.n}x 40ft · ${(f40.utilizacao * 100).toFixed(0)}% cheio`,
+        pesoVolume: wm,
+      },
+      {
+        id: "FCL45", nome: "FCL 45ft HC", tipo: "Marítimo",
+        base: f45.base, qtdContainers: f45.n,
+        utilizacao: f45.utilizacao,
+        info: `${f45.n}x 45ft · ${(f45.utilizacao * 100).toFixed(0)}% cheio`,
+        pesoVolume: wm,
+      },
+      {
+        id: "AEREO", nome: "Aéreo", tipo: "Aéreo",
+        base: aereoBase, qtdContainers: 0,
+        utilizacao: 0,
+        info: `${pesoTaxado.toFixed(0)} kg taxado`,
+        pesoVolume: wm,
+      },
+    ].map((o) => ({ ...o, total: o.base + taxas, taxas }));
+  }, [pesoReal, cbm, comprimento, largura, altura, taxasAdicionais, CONTAINER_CAPS]);
 
   const melhor = useMemo(() => {
     const validas = cotacoes.filter((o) => o.base > 0);
     if (validas.length === 0) return null;
-    return validas.reduce((prev, cur) => (cur.total < prev.total ? cur : prev));
+    const maxTotal = Math.max(...validas.map((o) => o.total));
+
+    // Score: quanto menor melhor
+    // FCL: prioriza menos containers > alto aproveitamento > menor custo
+    // LCL: bom para cargas pequenas (< 15 W/M)
+    // Aéreo: nunca recomendado automaticamente (penalidade alta)
+    const score = (o: typeof validas[0]) => {
+      if (o.id === "AEREO") return 1_000_000;
+      if (o.id === "LCL") {
+        // preferível apenas se carga pequena
+        const pequena = o.pesoVolume < 15;
+        return pequena ? o.total / maxTotal * 50 : 300 + o.total / maxTotal * 50;
+      }
+      // FCL: penaliza mais containers e baixo aproveitamento
+      return o.qtdContainers * 1000 + (1 - Math.min(o.utilizacao, 1)) * 500 + o.total / maxTotal * 50;
+    };
+
+    return validas.reduce((best, cur) => score(cur) < score(best) ? cur : best);
   }, [cotacoes]);
+
+  // Auto-preenche qtd de containers quando cargo muda
+  useEffect(() => {
+    const peso   = Number(pesoReal || 0);
+    let volume   = Number(cbm || 0);
+    if (!volume && comprimento && largura && altura) {
+      volume = (Number(comprimento) * Number(largura) * Number(altura)) / 1_000_000;
+    }
+    if (!peso && !volume) {
+      setSimQtd20(""); setSimQtd40(""); setSimQtd45("");
+      return;
+    }
+    const calc = (capCbm: number, capKg: number) =>
+      Math.max(1, Math.ceil(Math.max(
+        volume > 0 ? volume / capCbm : 0,
+        peso   > 0 ? peso   / capKg  : 0,
+      )));
+    setSimQtd20(String(calc(25, 21_600)));
+    setSimQtd40(String(calc(58, 26_500)));
+    setSimQtd45(String(calc(86, 27_600)));
+  }, [pesoReal, cbm, comprimento, largura, altura]);
 
   const containerObs = useMemo(() => {
     const parts: string[] = [];
@@ -1726,12 +1822,21 @@ const Embarques = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Cotações Disponíveis</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Recomendação baseada em peso, volume e aproveitamento do container
+                </p>
               </CardHeader>
               <CardContent>
                 {melhor ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
                     {cotacoes.map((o) => {
                       const isBest = melhor && o.id === melhor.id;
+                      const util = o.utilizacao;
+                      const utilPct = Math.round(Math.min(util, 1) * 100);
+                      const utilColor =
+                        utilPct >= 80 ? "bg-green-500" :
+                        utilPct >= 50 ? "bg-yellow-400" :
+                        utilPct >  0  ? "bg-orange-400" : "bg-muted";
                       return (
                         <div
                           key={o.id}
@@ -1746,27 +1851,39 @@ const Embarques = () => {
                             </span>
                           )}
                           <p className="text-sm font-semibold">{o.nome}</p>
-                          <div className="text-xs space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">
-                                Peso/Volume
-                              </span>
-                              <span>{o.pesoVolume.toFixed(2)}</span>
+
+                          {/* Barra de aproveitamento */}
+                          {o.id !== "AEREO" && o.id !== "LCL" && (
+                            <div className="space-y-0.5">
+                              <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <span>Aproveitamento</span>
+                                <span>{utilPct}%</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                <div className={cn("h-full rounded-full transition-all", utilColor)} style={{ width: `${Math.min(utilPct, 100)}%` }} />
+                              </div>
                             </div>
+                          )}
+
+                          <div className="text-xs space-y-1 pt-1">
+                            {o.info && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Detalhe</span>
+                                <span className="font-medium">{o.info}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">
-                                Frete Base
-                              </span>
-                              <span>R$ {o.base.toFixed(2)}</span>
+                              <span className="text-muted-foreground">Frete Base</span>
+                              <span>R$ {o.base.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Taxas</span>
-                              <span>R$ {o.taxas.toFixed(2)}</span>
+                              <span>R$ {o.taxas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between font-semibold pt-1 border-t">
                               <span>Total</span>
                               <span className="text-primary">
-                                R$ {o.total.toFixed(2)}
+                                R$ {o.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
