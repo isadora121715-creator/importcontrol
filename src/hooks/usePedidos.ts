@@ -6,6 +6,7 @@ import { parseExcelValvulas } from "@/lib/parseExcelValvulas";
 import { parseExcelTubos } from "@/lib/parseExcelTubos";
 import { parseExcelEmbarques } from "@/lib/parseExcelEmbarques";
 import { readPedidosCache, retryAsync, withTimeout, writePedidosCache, yieldToMainThread } from "@/lib/pedidosPerformance";
+import { syncCatalogo } from "@/lib/syncCatalogo";
 import { toast } from "sonner";
 
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
@@ -236,6 +237,14 @@ export function usePedidos(categoria: string = "Conexões") {
       setLastUpdated(completedAt);
       writePedidosCache(categoria, rows, file.name);
       queryClient.setQueryData(["pedidos", categoria], rows);
+
+      // Sync catalog for categories that carry product data
+      if (categoria !== "Embarques") {
+        const { added, updated } = syncCatalogo(rows, categoria);
+        if (added > 0 || updated > 0) {
+          toast.info(`Catálogo: +${added} novo(s), ${updated} atualizado(s).`);
+        }
+      }
       setUpdateProgress(100);
       setUpdateMessage("Atualização concluída.");
       void queryClient.invalidateQueries({ queryKey: ["pedidos", categoria] });

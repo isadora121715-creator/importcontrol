@@ -14,6 +14,7 @@ export function HeaderTabs() {
   const isEmbarques = path.startsWith("/embarques");
   const isGeral = path.startsWith("/geral");
   const isPrecificacao = path.startsWith("/precificacao");
+  const isCatalogo = path.startsWith("/catalogo");
 
   const tabClass = (active: boolean) =>
     `flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors ${
@@ -59,6 +60,9 @@ export function HeaderTabs() {
           </Link>
           <Link to="/precificacao" className={tabClass(isPrecificacao)}>
             Precificação
+          </Link>
+          <Link to="/catalogo" className={tabClass(isCatalogo)}>
+            Catálogo
           </Link>
         </div>
 
