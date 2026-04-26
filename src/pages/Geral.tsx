@@ -319,9 +319,12 @@ const Geral = () => {
   const formatBRL = (v: number) =>
     `R$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
 
+  const formatUSD = (v: number) =>
+    `$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+
   const kpis = [
     { label: "Total de POs", value: stats.totals.pos.toLocaleString("pt-BR"), icon: FileText, color: "text-primary", bg: "bg-primary/10" },
-    { label: "Valor Total de Compra", value: formatBRL(stats.totals.valorCompra), icon: ShoppingCart, color: "text-blue-600", bg: "bg-blue-500/10" },
+    { label: "Valor Total de Compra", value: formatUSD(stats.totals.valorCompra), icon: ShoppingCart, color: "text-blue-600", bg: "bg-blue-500/10" },
     { label: "Valor Total de Venda", value: formatBRL(stats.totals.valorVenda), icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-500/10" },
     { label: "Total de Itens", value: stats.totals.itens.toLocaleString("pt-BR"), icon: Package, color: "text-amber-600", bg: "bg-amber-500/10" },
     { label: "Total de Fornecedores", value: stats.totals.fornecedores.toLocaleString("pt-BR"), icon: Users, color: "text-fuchsia-600", bg: "bg-fuchsia-500/10" },
@@ -351,9 +354,9 @@ const Geral = () => {
                   <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${k.bg}`}>
                     <Icon className={`h-6 w-6 ${k.color}`} />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-2xl font-bold leading-none truncate">{k.value}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{k.label}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xl font-bold leading-tight break-words">{k.value}</p>
+                    <p className="mt-1 text-sm text-muted-foreground leading-snug">{k.label}</p>
                   </div>
                 </CardContent>
               </Card>
