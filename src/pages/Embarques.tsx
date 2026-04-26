@@ -1913,7 +1913,7 @@ const Embarques = () => {
                           {/* Dimensões internas (apenas FCL) */}
                           {"spec" in o && o.spec && (
                             <p className="text-[10px] text-muted-foreground leading-tight">
-                              {o.spec.c}×{o.spec.l}×{o.spec.a} cm · {o.spec.cbm} m³ · {(o.spec.maxKg / 1000).toFixed(1)} t
+                              {(o.spec.c / 100).toFixed(2)}m × {(o.spec.l / 100).toFixed(2)}m × {(o.spec.a / 100).toFixed(2)}m · {o.spec.cbm} m³ · {(o.spec.maxKg / 1000).toFixed(1)} t
                             </p>
                           )}
 
