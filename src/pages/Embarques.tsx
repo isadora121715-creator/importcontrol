@@ -811,26 +811,45 @@ const Embarques = () => {
 
     /**
      * Regras de recomendação (score menor = melhor):
-     *  1. Se cargo não cabe fisicamente → descarta
-     *  2. LCL: preferível só para cargas pequenas (< 10 W/M, < 5 t)
-     *     caso contrário FCL ganha
-     *  3. FCL: prioridade — menor nº de containers > maior aproveitamento > menor custo
-     *     Um container com 60% de aproveitamento é MELHOR que dois com 90%.
+     *
+     *  LCL  → recomendado apenas para carga PEQUENA (< 5 W/M ≈ 5 CBM / 5 ton)
+     *          Acima disso FCL quase sempre é mais econômico e seguro.
+     *
+     *  FCL  → prioridades em ordem:
+     *          1. Menor nº de containers (1 container a 50% > 2 containers a 95%)
+     *          2. Aproveitamento entre 50-95% (penaliza container vazio OU sobrecarregado)
+     *          3. Menor custo (desempate)
+     *
+     *  DIMENSIONAL → container incompatível é descartado (score ∞)
      */
     const score = (o: typeof candidatos[0]): number => {
       if (!o.cabeFisicamente) return 999_999;
+
       if (o.id === "LCL") {
-        const pequena = o.pesoVolume > 0 && o.pesoVolume < 10;
-        return pequena ? 5_000 + (o.total / maxTotal) * 500 : 50_000;
+        if (o.pesoVolume <= 0) return 999_999;          // sem carga → não recomendar
+        if (o.pesoVolume < 5)  return 1_000;            // carga pequena: LCL ideal
+        if (o.pesoVolume < 10) return 12_000;           // médio: LCL perde para FCL
+        return 50_000;                                   // grande: FCL ganha sempre
       }
-      // FCL: cada container adicional custa 10 000 pontos (nunca paga compensar)
-      const penQtd  = o.qtdContainers * 10_000;
-      // Aproveitamento ideal entre 60-95%: fora disso penaliza suavemente
-      const util    = o.utilizacao;
-      const penUtil = util < 0.60 ? (0.60 - util) * 3_000   // container muito vazio
-                    : util > 0.95 ? (util - 0.95)  * 1_000   // quase sobrecarregado
-                    : 0;
-      const penCusto = (o.total / maxTotal) * 300;
+
+      // FCL ─────────────────────────────────────────────────────────────
+      const util = o.utilizacao;
+
+      // Penalidade por nº de containers (a maior penalidade do sistema)
+      const penQtd = o.qtdContainers * 8_000;
+
+      // Penalidade de aproveitamento:
+      //   < 50% → container muito vazio (penaliza bastante)
+      //   50-95% → zona ideal (sem penalidade)
+      //   > 95% → quase no limite (penaliza levemente)
+      const penUtil =
+        util < 0.50 ? (0.50 - util) * 5_000
+        : util > 0.95 ? (util - 0.95) * 1_500
+        : 0;
+
+      // Custo normalizado (desempate)
+      const penCusto = (o.total / maxTotal) * 400;
+
       return penQtd + penUtil + penCusto;
     };
 
