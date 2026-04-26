@@ -691,6 +691,9 @@ const Embarques = () => {
   const [origem, setOrigem] = useState("XINGANG - CHINA");
   const [destino, setDestino] = useState("SC");
   const [taxasAdicionais, setTaxasAdicionais] = useState("");
+  const [simQtd20, setSimQtd20] = useState("");
+  const [simQtd40, setSimQtd40] = useState("");
+  const [simQtd45, setSimQtd45] = useState("");
 
   const cotacoes = useMemo(() => {
     const peso = Number(pesoReal || 0);
@@ -722,6 +725,17 @@ const Embarques = () => {
     if (validas.length === 0) return null;
     return validas.reduce((prev, cur) => (cur.total < prev.total ? cur : prev));
   }, [cotacoes]);
+
+  const containerObs = useMemo(() => {
+    const parts: string[] = [];
+    const q20 = Number(simQtd20);
+    const q40 = Number(simQtd40);
+    const q45 = Number(simQtd45);
+    if (q20 > 0) parts.push(`${q20}x20'`);
+    if (q40 > 0) parts.push(`${q40}x40'`);
+    if (q45 > 0) parts.push(`${q45}x45'`);
+    return parts.length > 0 ? parts.join(" e ") : null;
+  }, [simQtd20, simQtd40, simQtd45]);
 
   const selected = CONTAINERS.find((c) => c.id === selectedContainer)!;
 
@@ -1652,6 +1666,59 @@ const Embarques = () => {
                       onChange={(e) => setTaxasAdicionais(e.target.value)}
                     />
                   </div>
+                </div>
+
+                {/* Quantidade de containers */}
+                <div className="border-t pt-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Quantidade de Containers Necessária
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        Qtd 20ft
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={simQtd20}
+                        placeholder="0"
+                        onChange={(e) => setSimQtd20(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        Qtd 40ft
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={simQtd40}
+                        placeholder="0"
+                        onChange={(e) => setSimQtd40(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">
+                        Qtd 45ft
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={simQtd45}
+                        placeholder="0"
+                        onChange={(e) => setSimQtd45(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {containerObs && (
+                    <div className="flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-4 py-2.5">
+                      <Package className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        Necessário: <span className="font-bold">{containerObs}</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
