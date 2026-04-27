@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useRef, useState, useEffect } from "react";
 import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye, ArrowLeft } from "lucide-react";
 import { usePedidos } from "@/hooks/usePedidos";
+import { useAuth } from "@/contexts/AuthContext";
 import { DashboardCards } from "@/components/DashboardCards";
 import { SupplierStatusTable } from "@/components/SupplierStatusTable";
 import { DelayAlertTable } from "@/components/DelayAlertTable";
@@ -16,6 +17,7 @@ const VALVULAS_STATUS_OPTIONS = ["On time", "Atrasado"];
 
 const Valvulas = () => {
   const activeCategory = "Válvulas";
+  const { user } = useAuth();
 
   const {
     data,
@@ -233,17 +235,19 @@ const Valvulas = () => {
                       <Download className="h-3.5 w-3.5" />
                       Baixar Excel
                     </button>
-                    <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
-                      <Upload className="h-3.5 w-3.5" />
-                      {isUpdating ? "Atualizando..." : `Atualizar Planilha ${activeCategory}`}
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                        disabled={isUpdating}
-                      />
-                    </label>
+                    {user && (
+                      <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+                        <Upload className="h-3.5 w-3.5" />
+                        {isUpdating ? "Atualizando..." : `Atualizar Planilha ${activeCategory}`}
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          disabled={isUpdating}
+                        />
+                      </label>
+                    )}
                     <div className="text-right">
                       <p className="text-sm font-semibold">{filteredData.length}</p>
                       <p className="text-xs text-muted-foreground">registros</p>
