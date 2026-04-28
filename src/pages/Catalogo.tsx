@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,11 +21,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Trash2, Download, RefreshCw } from "lucide-react";
+import { Search, Plus, Trash2, Download, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   readCatalogo,
-  writeCatalogo,
+  upsertCatalogoItems,
+  deleteCatalogoItem,
   type CatalogoItem,
 } from "@/lib/syncCatalogo";
 
@@ -39,7 +41,6 @@ function fmtPreco(val: number | null): string {
 }
 
 function exportExcel(items: CatalogoItem[]) {
-  // ── 1. Build data rows ──────────────────────────────────────────────────
   const headerRow = [
     "Código",
     "Descrição",
@@ -52,128 +53,113 @@ function exportExcel(items: CatalogoItem[]) {
   const dataRows = items.map((i) => [
     i.codigo || "",
     i.descricao || "",
-    i.precoCompra ?? "",           // number → Excel numeric cell
-    i.fornecedores.join("\n") || "",   // one supplier per line inside the cell
+    i.precoCompra ?? "",
+    i.fornecedores.join("\n") || "",
     i.categorias.join("\n") || "",
     i.ultimaAtualizacao
       ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR")
       : "",
   ]);
 
-  // ── 2. Create worksheet ─────────────────────────────────────────────────
   const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
 
-  // ── 3. Column widths ────────────────────────────────────────────────────
   ws["!cols"] = [
-    { wch: 18 },   // Código
-    { wch: 52 },   // Descrição
-    { wch: 20 },   // Preço
-    { wch: 30 },   // Fornecedores
-    { wch: 18 },   // Categorias
-    { wch: 20 },   // Última Atualização
+    { wch: 18 },
+    { wch: 52 },
+    { wch: 20 },
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 20 },
   ];
 
-  // ── 4. Row heights: header taller, data rows allow wrap ─────────────────
-  const rowHeights: XLSX.RowInfo[] = [{ hpt: 28 }]; // header row
+  const rowHeights: XLSX.RowInfo[] = [{ hpt: 28 }];
   dataRows.forEach((row) => {
     const maxLines = Math.max(
-      String(row[3]).split("\n").length,   // fornecedores lines
-      String(row[4]).split("\n").length,   // categorias lines
+      String(row[3]).split("\n").length,
+      String(row[4]).split("\n").length,
       1,
     );
     rowHeights.push({ hpt: Math.max(18, maxLines * 16) });
   });
   ws["!rows"] = rowHeights;
 
-  // ── 5. Style header cells (bold + background) ───────────────────────────
   const totalCols = headerRow.length;
   for (let c = 0; c < totalCols; c++) {
     const addr = XLSX.utils.encode_cell({ r: 0, c });
     if (!ws[addr]) continue;
     ws[addr].s = {
-      font:    { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
-      fill:    { fgColor: { rgb: "1E3A5F" } },
+      font:      { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+      fill:      { fgColor: { rgb: "1E3A5F" } },
       alignment: { horizontal: "center", vertical: "center", wrapText: true },
-      border: {
-        bottom: { style: "thin", color: { rgb: "AAAAAA" } },
-      },
+      border:    { bottom: { style: "thin", color: { rgb: "AAAAAA" } } },
     };
   }
 
-  // ── 6. Style data cells ─────────────────────────────────────────────────
   for (let r = 1; r <= dataRows.length; r++) {
-    const isEven = r % 2 === 0;
-    const bgRgb  = isEven ? "F3F6FB" : "FFFFFF";
-
+    const bgRgb = r % 2 === 0 ? "F3F6FB" : "FFFFFF";
     for (let c = 0; c < totalCols; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
-      if (!ws[addr]) {
-        // ensure empty cells still get style
-        ws[addr] = { t: "z", v: "" };
-      }
+      if (!ws[addr]) ws[addr] = { t: "z", v: "" };
       const isPrice = c === 2;
       ws[addr].s = {
         font:      { sz: 10 },
         fill:      { fgColor: { rgb: bgRgb } },
-        alignment: {
-          horizontal: isPrice ? "right" : "left",
-          vertical:   "center",
-          wrapText:   true,
-        },
-        border: {
-          bottom: { style: "hair", color: { rgb: "DDDDDD" } },
-        },
+        alignment: { horizontal: isPrice ? "right" : "left", vertical: "center", wrapText: true },
+        border:    { bottom: { style: "hair", color: { rgb: "DDDDDD" } } },
       };
-      // format price column as number with 2 decimals
-      if (isPrice && typeof ws[addr].v === "number") {
-        ws[addr].z = '#,##0.00 "USD"';
-      }
+      if (isPrice && typeof ws[addr].v === "number") ws[addr].z = '#,##0.00 "USD"';
     }
   }
 
-  // ── 7. Freeze header row ────────────────────────────────────────────────
   ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activeCell: "A2" };
 
-  // ── 8. Write workbook ───────────────────────────────────────────────────
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Catálogo");
-
   const date = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `catalogo_materiais_${date}.xlsx`);
 }
 
 const CATEGORIA_COLORS: Record<string, string> = {
-  "Conexões":  "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  "Válvulas":  "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  "Tubos":     "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  "Conexões": "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  "Válvulas": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  "Tubos":    "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
 function catColor(cat: string) {
   return CATEGORIA_COLORS[cat] ?? "bg-muted text-muted-foreground";
 }
 
-// ---------- empty item factory ----------
 function emptyItem(): Omit<CatalogoItem, "id" | "ultimaAtualizacao"> {
   return { codigo: "", descricao: "", precoCompra: null, fornecedores: [], categorias: [] };
 }
 
+function makeKey(codigo: string, descricao: string): string {
+  if (codigo) return codigo.trim().toUpperCase();
+  return descricao.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 60);
+}
+
 export default function Catalogo() {
-  const [catalog, setCatalog] = useState<CatalogoItem[]>(() => readCatalogo());
+  const queryClient = useQueryClient();
+
+  // ── dados do Supabase ─────────────────────────────────────────────────────
+  const { data: catalog = [], isLoading, refetch } = useQuery({
+    queryKey: ["catalogo"],
+    queryFn:  readCatalogo,
+    staleTime: 30_000,
+    gcTime:    10 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("Todas");
 
   // dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editItem, setEditItem] = useState<CatalogoItem | null>(null);
   const [form, setForm] = useState(emptyItem());
   const [formFornecedor, setFormFornecedor] = useState("");
   const [formCategoria, setFormCategoria] = useState("");
-
-  // re-load from LS
-  function reload() {
-    setCatalog(readCatalogo());
-    toast.success("Catálogo recarregado.");
-  }
 
   // derived
   const categories = useMemo(() => {
@@ -190,8 +176,7 @@ export default function Catalogo() {
         i.codigo.toLowerCase().includes(q) ||
         i.descricao.toLowerCase().includes(q) ||
         i.fornecedores.some((f) => f.toLowerCase().includes(q));
-      const matchCat =
-        filterCat === "Todas" || i.categorias.includes(filterCat);
+      const matchCat = filterCat === "Todas" || i.categorias.includes(filterCat);
       return matchSearch && matchCat;
     });
   }, [catalog, search, filterCat]);
@@ -208,11 +193,11 @@ export default function Catalogo() {
   function openEdit(item: CatalogoItem) {
     setEditItem(item);
     setForm({
-      codigo: item.codigo,
-      descricao: item.descricao,
-      precoCompra: item.precoCompra,
+      codigo:       item.codigo,
+      descricao:    item.descricao,
+      precoCompra:  item.precoCompra,
       fornecedores: [...item.fornecedores],
-      categorias: [...item.categorias],
+      categorias:   [...item.categorias],
     });
     setFormFornecedor("");
     setFormCategoria("");
@@ -241,56 +226,39 @@ export default function Catalogo() {
     setForm((prev) => ({ ...prev, categorias: prev.categorias.filter((x) => x !== c) }));
   }
 
-  function saveDialog() {
+  async function saveDialog() {
     if (!form.codigo && !form.descricao) {
       toast.error("Informe ao menos o código ou a descrição.");
       return;
     }
-    const now = new Date().toISOString();
-    const key = form.codigo
-      ? form.codigo.trim().toUpperCase()
-      : form.descricao.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 60);
-
-    const current = readCatalogo();
-    const byKey = new Map(current.map((i) => [i.id, i]));
-
-    if (editItem) {
-      const item = byKey.get(editItem.id);
-      if (item) {
-        item.codigo = form.codigo;
-        item.descricao = form.descricao;
-        item.precoCompra = form.precoCompra;
-        item.fornecedores = form.fornecedores;
-        item.categorias = form.categorias;
-        item.ultimaAtualizacao = now;
-      }
-    } else {
-      if (byKey.has(key)) {
-        toast.error("Já existe um item com esse código/descrição.");
-        return;
-      }
-      byKey.set(key, {
-        id: key,
-        codigo: form.codigo,
-        descricao: form.descricao,
-        precoCompra: form.precoCompra,
-        fornecedores: form.fornecedores,
-        categorias: form.categorias,
+    setSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const key = makeKey(form.codigo, form.descricao);
+      const item: CatalogoItem = {
+        id:                editItem?.id ?? key,
+        codigo:            form.codigo,
+        descricao:         form.descricao,
+        precoCompra:       form.precoCompra,
+        fornecedores:      form.fornecedores,
+        categorias:        form.categorias,
         ultimaAtualizacao: now,
-      });
+      };
+      await upsertCatalogoItems([item]);
+      await queryClient.invalidateQueries({ queryKey: ["catalogo"] });
+      setDialogOpen(false);
+      toast.success(editItem ? "Item atualizado." : "Item adicionado.");
+    } catch (e) {
+      toast.error("Erro ao salvar item.");
+      console.error(e);
+    } finally {
+      setSaving(false);
     }
-
-    const updated = Array.from(byKey.values());
-    writeCatalogo(updated);
-    setCatalog(updated);
-    setDialogOpen(false);
-    toast.success(editItem ? "Item atualizado." : "Item adicionado.");
   }
 
-  function deleteItem(id: string) {
-    const updated = catalog.filter((i) => i.id !== id);
-    writeCatalogo(updated);
-    setCatalog(updated);
+  async function handleDeleteItem(id: string) {
+    await deleteCatalogoItem(id);
+    await queryClient.invalidateQueries({ queryKey: ["catalogo"] });
     toast.success("Item removido.");
   }
 
@@ -310,11 +278,11 @@ export default function Catalogo() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={reload}>
-              <RefreshCw className="h-4 w-4 mr-1" />
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
               Recarregar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportExcel(filtered)}>
+            <Button variant="outline" size="sm" onClick={() => exportExcel(filtered)} disabled={filtered.length === 0}>
               <Download className="h-4 w-4 mr-1" />
               Exportar Excel
             </Button>
@@ -377,91 +345,101 @@ export default function Catalogo() {
           </div>
         </div>
 
+        {/* Loading */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm">Carregando catálogo…</span>
+          </div>
+        )}
+
         {/* Table */}
-        <div className="rounded-lg border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-32">Código</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead className="w-36 text-right">Preço Compra</TableHead>
-                <TableHead>Fornecedores</TableHead>
-                <TableHead>Categorias</TableHead>
-                <TableHead className="w-36">Última Atualização</TableHead>
-                <TableHead className="w-16" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                    {catalog.length === 0
-                      ? "Nenhum item ainda. Importe uma planilha de Conexões, Válvulas ou Tubos para popular o catálogo."
-                      : "Nenhum resultado para a busca atual."}
-                  </TableCell>
+        {!isLoading && (
+          <div className="rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-32">Código</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead className="w-36 text-right">Preço Compra</TableHead>
+                  <TableHead>Fornecedores</TableHead>
+                  <TableHead>Categorias</TableHead>
+                  <TableHead className="w-36">Última Atualização</TableHead>
+                  <TableHead className="w-16" />
                 </TableRow>
-              ) : (
-                filtered.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => openEdit(item)}
-                  >
-                    <TableCell className="font-mono text-xs font-medium">
-                      {item.codigo || <span className="text-muted-foreground italic">—</span>}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate" title={item.descricao}>
-                      {item.descricao || <span className="text-muted-foreground italic">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {fmtPreco(item.precoCompra)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {item.fornecedores.length === 0 ? (
-                          <span className="text-muted-foreground text-xs italic">—</span>
-                        ) : (
-                          item.fornecedores.map((f) => (
-                            <Badge key={f} variant="secondary" className="text-xs">
-                              {f}
-                            </Badge>
-                          ))
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {item.categorias.map((c) => (
-                          <span
-                            key={c}
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catColor(c)}`}
-                          >
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {new Date(item.ultimaAtualizacao).toLocaleDateString("pt-BR")}
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => deleteItem(item.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                      {catalog.length === 0
+                        ? "Nenhum item ainda. Importe uma planilha de Conexões, Válvulas ou Tubos para popular o catálogo."
+                        : "Nenhum resultado para a busca atual."}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : (
+                  filtered.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => openEdit(item)}
+                    >
+                      <TableCell className="font-mono text-xs font-medium">
+                        {item.codigo || <span className="text-muted-foreground italic">—</span>}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate" title={item.descricao}>
+                        {item.descricao || <span className="text-muted-foreground italic">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {fmtPreco(item.precoCompra)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {item.fornecedores.length === 0 ? (
+                            <span className="text-muted-foreground text-xs italic">—</span>
+                          ) : (
+                            item.fornecedores.map((f) => (
+                              <Badge key={f} variant="secondary" className="text-xs">
+                                {f}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {item.categorias.map((c) => (
+                            <span
+                              key={c}
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catColor(c)}`}
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(item.ultimaAtualizacao).toLocaleDateString("pt-BR")}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteItem(item.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
-        {filtered.length > 0 && (
+        {filtered.length > 0 && !isLoading && (
           <p className="text-xs text-muted-foreground text-right">
             Exibindo {filtered.length} de {catalog.length} itens
           </p>
@@ -571,10 +549,13 @@ export default function Catalogo() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={saveDialog}>{editItem ? "Salvar" : "Adicionar"}</Button>
+            <Button onClick={saveDialog} disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editItem ? "Salvar" : "Adicionar"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

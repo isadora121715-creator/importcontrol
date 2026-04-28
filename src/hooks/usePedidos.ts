@@ -240,10 +240,11 @@ export function usePedidos(categoria: string = "Conexões") {
 
       // Sync catalog for categories that carry product data
       if (categoria !== "Embarques") {
-        const { added, updated } = syncCatalogo(rows, categoria);
-        if (added > 0 || updated > 0) {
-          toast.info(`Catálogo: +${added} novo(s), ${updated} atualizado(s).`);
-        }
+        void syncCatalogo(rows, categoria).then(({ added, updated }) => {
+          if (added > 0 || updated > 0) {
+            toast.info(`Catálogo: +${added} novo(s), ${updated} atualizado(s).`);
+          }
+        });
       }
       setUpdateProgress(100);
       setUpdateMessage("Atualização concluída.");

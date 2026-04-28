@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
 const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v4";
@@ -256,28 +257,24 @@ const Embarques = () => {
     aereo: number;
   }>({ cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
 
+  // Carrega dados de fretes internacionais do Supabase (visível para todos)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_INTL_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as {
-        rows: FreteIntl[];
-        columns: string[];
-        subHeaders?: string[];
-        fileName: string;
-        uploadedAt: string;
-        totals?: { cont20: number; cont40: number; cont45: number; aereo: number };
-      };
-      setIntlRows(saved.rows ?? []);
-      setIntlColumns(saved.columns ?? []);
-      setIntlSubHeaders(saved.subHeaders ?? []);
-      setIntlFileName(saved.fileName ?? "");
-      setIntlUploadedAt(saved.uploadedAt ?? "");
-      if (saved.totals) setIntlTotals(saved.totals);
-    } catch {
-      /* ignore */
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("fretes_internacionais")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle()
+      .then(({ data }: { data: Record<string, unknown> | null }) => {
+        if (!data) return;
+        setIntlRows((data.rows as FreteIntl[]) ?? []);
+        setIntlColumns((data.columns as string[]) ?? []);
+        setIntlSubHeaders((data.sub_headers as string[]) ?? []);
+        setIntlFileName((data.file_name as string) ?? "");
+        setIntlUploadedAt((data.uploaded_at as string) ?? "");
+        if (data.totals) setIntlTotals(data.totals as typeof intlTotals);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleIntlUpload = async (file: File) => {
@@ -362,6 +359,20 @@ const Embarques = () => {
       setIntlFileName(file.name);
       setIntlUploadedAt(uploadedAt);
       setIntlTotals(totals);
+      // Salva no Supabase (id fixo = 1, sempre sobrescreve)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (supabase as any)
+        .from("fretes_internacionais")
+        .upsert({
+          id:          1,
+          rows:        dataRows,
+          columns:     headers,
+          sub_headers: subHeaders,
+          file_name:   file.name,
+          uploaded_at: uploadedAt,
+          totals,
+        }, { onConflict: "id" });
+      // mantém localStorage como cache local para fallback
       window.localStorage.setItem(
         STORAGE_INTL_KEY,
         JSON.stringify({
@@ -394,6 +405,8 @@ const Embarques = () => {
     setIntlUploadedAt("");
     setIntlTotals({ cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
     window.localStorage.removeItem(STORAGE_INTL_KEY);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    void (supabase as any).from("fretes_internacionais").delete().eq("id", 1);
   };
 
   const downloadIntlFrete = () => {
