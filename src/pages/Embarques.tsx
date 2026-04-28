@@ -29,7 +29,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
 
 const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
 const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v4";
@@ -233,7 +232,6 @@ const ROTAS_AEREAS = [
 // COMPONENTE
 // ---------------------------------------------------------------------------
 const Embarques = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
 
@@ -1225,33 +1223,25 @@ const Embarques = () => {
               <CardContent className="space-y-6">
                 <div>
                   <h4 className="text-sm font-semibold mb-2">Carregar Planilha de Cotações</h4>
-                  {user ? (
-                    <>
-                      <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-4 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
-                        <Upload className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {intlRows.length > 0 ? "Atualizar Planilha de Fretes" : "Carregar Planilha de Fretes"}
-                        </span>
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls,.csv"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) void handleIntlUpload(file);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Os dados estão salvos no navegador. Faça upload de um novo arquivo para atualizar.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-muted-foreground py-2">
-                      Dados carregados pelo administrador.
-                    </p>
-                  )}
+                  <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-4 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {intlRows.length > 0 ? "Atualizar Planilha de Fretes" : "Carregar Planilha de Fretes"}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleIntlUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Os dados estão salvos no navegador. Faça upload de um novo arquivo para atualizar.
+                  </p>
                 </div>
 
                 {intlRows.length === 0 ? (

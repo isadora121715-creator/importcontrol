@@ -4,7 +4,6 @@ import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, 
 import logoHci from "@/assets/logo-hci.jpeg";
 import logoFluxo from "@/assets/logo-fluxo.jpeg";
 import { usePedidos } from "@/hooks/usePedidos";
-import { useAuth } from "@/contexts/AuthContext";
 import { DashboardCards } from "@/components/DashboardCards";
 import { SupplierStatusTable } from "@/components/SupplierStatusTable";
 import { DelayAlertTable } from "@/components/DelayAlertTable";
@@ -29,8 +28,7 @@ const Index = () => {
   const isTubos = path.startsWith("/tubos") || hostname.includes("tubos");
   const isEmbarques = path.startsWith("/embarques") || hostname.includes("embarques");
   const activeCategory = isValvula ? "Válvulas" : isTubos ? "Tubos" : isEmbarques ? "Embarques" : "Conexões";
-  const { user } = useAuth();
-
+  
   const {
     data,
     loading,
@@ -248,19 +246,17 @@ const Index = () => {
                       <Download className="h-3.5 w-3.5" />
                       Baixar Excel
                     </button>
-                    {user && (
-                      <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
-                        <Upload className="h-3.5 w-3.5" />
-                        {isUpdating ? "Atualizando..." : `Atualizar Planilha ${activeCategory}`}
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                          disabled={isUpdating}
-                        />
-                      </label>
-                    )}
+                    <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+                      <Upload className="h-3.5 w-3.5" />
+                      {isUpdating ? "Atualizando..." : `Atualizar Planilha ${activeCategory}`}
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        disabled={isUpdating}
+                      />
+                    </label>
                     <div className="text-right">
                       <p className="text-sm font-semibold">{filteredData.length}</p>
                       <p className="text-xs text-muted-foreground">registros</p>
