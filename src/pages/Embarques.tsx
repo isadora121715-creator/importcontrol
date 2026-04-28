@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import staticIntl from "@/data/fretes-internacionais.json";
 import {
   Ship,
   Package,
@@ -257,7 +258,7 @@ const Embarques = () => {
     aereo: number;
   }>({ cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
 
-  // Carrega dados de fretes internacionais do Supabase (visível para todos)
+  // Carrega dados de fretes internacionais — Supabase primeiro, fallback no JSON estático
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
@@ -265,14 +266,25 @@ const Embarques = () => {
       .select("*")
       .eq("id", 1)
       .maybeSingle()
-      .then(({ data }: { data: Record<string, unknown> | null }) => {
-        if (!data) return;
-        setIntlRows((data.rows as FreteIntl[]) ?? []);
-        setIntlColumns((data.columns as string[]) ?? []);
-        setIntlSubHeaders((data.sub_headers as string[]) ?? []);
-        setIntlFileName((data.file_name as string) ?? "");
-        setIntlUploadedAt((data.uploaded_at as string) ?? "");
-        if (data.totals) setIntlTotals(data.totals as typeof intlTotals);
+      .then(({ data, error }: { data: Record<string, unknown> | null; error: unknown }) => {
+        if (data && (data.rows as unknown[])?.length > 0) {
+          // Dados do Supabase têm prioridade (versão mais recente)
+          setIntlRows((data.rows as FreteIntl[]) ?? []);
+          setIntlColumns((data.columns as string[]) ?? []);
+          setIntlSubHeaders((data.sub_headers as string[]) ?? []);
+          setIntlFileName((data.file_name as string) ?? "");
+          setIntlUploadedAt((data.uploaded_at as string) ?? "");
+          if (data.totals) setIntlTotals(data.totals as typeof intlTotals);
+        } else {
+          // Fallback: dados estáticos embutidos no app (sempre disponíveis)
+          if (error) console.warn("fretes_internacionais Supabase:", error);
+          setIntlRows((staticIntl.rows as unknown as FreteIntl[]) ?? []);
+          setIntlColumns(staticIntl.columns ?? []);
+          setIntlSubHeaders(staticIntl.sub_headers ?? []);
+          setIntlFileName(staticIntl.file_name ?? "");
+          setIntlUploadedAt(staticIntl.uploaded_at ?? "");
+          setIntlTotals(staticIntl.totals ?? { cont20: 0, cont40: 0, cont45: 0, aereo: 0 });
+        }
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
