@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import staticCatalogo from "@/data/catalogo-static.json";
 import * as XLSX from "xlsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HeaderTabs } from "@/components/HeaderTabs";
@@ -141,14 +142,19 @@ function makeKey(codigo: string, descricao: string): string {
 export default function Catalogo() {
   const queryClient = useQueryClient();
 
-  // ── dados do Supabase ─────────────────────────────────────────────────────
-  const { data: catalog = [], isLoading, refetch } = useQuery({
+  // ── dados do Supabase (fallback no JSON estático quando vazio) ───────────
+  const { data: rawCatalog, isLoading, refetch } = useQuery({
     queryKey: ["catalogo"],
     queryFn:  readCatalogo,
     staleTime: 30_000,
     gcTime:    10 * 60_000,
     refetchOnWindowFocus: false,
   });
+  // Supabase tem prioridade; se retornar vazio usa os dados embutidos no app
+  const catalog: CatalogoItem[] =
+    rawCatalog && rawCatalog.length > 0
+      ? rawCatalog
+      : (staticCatalogo as unknown as CatalogoItem[]);
 
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("Todas");
