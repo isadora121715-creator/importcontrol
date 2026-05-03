@@ -102,8 +102,13 @@ export async function syncCatalogo(
     const codigo     = (row.codigo     ?? "").trim();
     const descricao  = (row.descricao  ?? "").trim();
     const fornecedor = (row.fornecedor ?? "").trim();
+    // Usa precoCompra; se ausente, usa precoVenda como referência de custo
     const precoCompra =
-      typeof row.precoCompra === "number" ? row.precoCompra : null;
+      typeof row.precoCompra === "number" && row.precoCompra > 0
+        ? row.precoCompra
+        : typeof row.precoVenda === "number" && row.precoVenda > 0
+          ? row.precoVenda
+          : null;
 
     if (!codigo && !descricao) continue;
 
@@ -113,7 +118,8 @@ export async function syncCatalogo(
       const item = byKey.get(key)!;
       let changed = false;
 
-      if (precoCompra !== null && item.precoCompra !== precoCompra) {
+      // Atualiza preço: aceita novo valor se atual é nulo, ou se precoCompra mudou
+      if (precoCompra !== null && (item.precoCompra === null || item.precoCompra !== precoCompra)) {
         item.precoCompra = precoCompra; changed = true;
       }
       if (fornecedor && !item.fornecedores.includes(fornecedor)) {
@@ -135,7 +141,7 @@ export async function syncCatalogo(
         id: key,
         codigo,
         descricao,
-        precoCompra,
+        precoCompra,          // já inclui fallback para precoVenda quando necessário
         fornecedores: fornecedor ? [fornecedor] : [],
         categorias:   [categoria],
         ultimaAtualizacao: now,

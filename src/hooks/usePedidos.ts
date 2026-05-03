@@ -238,12 +238,14 @@ export function usePedidos(categoria: string = "Conexões") {
       writePedidosCache(categoria, rows, file.name);
       queryClient.setQueryData(["pedidos", categoria], rows);
 
-      // Sync catalog for categories that carry product data
+      // Sync catalog for categories that carry product data, then refresh the catalog view
       if (categoria !== "Embarques") {
         void syncCatalogo(rows, categoria).then(({ added, updated }) => {
           if (added > 0 || updated > 0) {
             toast.info(`Catálogo: +${added} novo(s), ${updated} atualizado(s).`);
           }
+          // Recarrega o catálogo para todos que estiverem na aba
+          void queryClient.invalidateQueries({ queryKey: ["catalogo"] });
         });
       }
       setUpdateProgress(100);

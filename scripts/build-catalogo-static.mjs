@@ -73,7 +73,10 @@ const CONEXOES_MAP = {
   descricao: "descricao",
   "qty venda": "qtyVenda", "qty compra": "qtyCompra",
   qty: "qtyVenda",
-  "preco venda": "precoVenda", "preco compra": "precoCompra",
+  "preco venda": "precoVenda",
+  "preco venda total": "precoVenda",
+  "preco compra": "precoCompra",
+  "preco compra total": "precoCompra",
   po: "po", fornecedor: "fornecedor", forncedor: "fornecedor",
   "entrega fornecedor": "entregaFornecedor",
 };
@@ -246,12 +249,20 @@ function syncToMap(rows, categoria, byKey) {
     const codigo      = (row.codigo     ?? "").trim();
     const descricao   = (row.descricao  ?? "").trim();
     const fornecedor  = (row.fornecedor ?? "").trim();
-    const precoCompra = typeof row.precoCompra === "number" ? row.precoCompra : null;
+    // precoCompra direto; se ausente usa precoVenda como custo de referência
+    const precoCompra =
+      typeof row.precoCompra === "number" && row.precoCompra > 0
+        ? row.precoCompra
+        : typeof row.precoVenda === "number" && row.precoVenda > 0
+          ? row.precoVenda
+          : null;
     if (!codigo && !descricao) continue;
     const key = makeKey(codigo, descricao);
     if (byKey.has(key)) {
       const item = byKey.get(key);
-      if (precoCompra !== null) item.precoCompra = precoCompra;
+      // Atualiza se preço actual é nulo ou mudou
+      if (precoCompra !== null && (item.precoCompra === null || item.precoCompra !== precoCompra))
+        item.precoCompra = precoCompra;
       if (fornecedor && !item.fornecedores.includes(fornecedor)) item.fornecedores.push(fornecedor);
       if (!item.categorias.includes(categoria)) item.categorias.push(categoria);
       if (!item.codigo && codigo) item.codigo = codigo;
