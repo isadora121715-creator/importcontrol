@@ -1586,7 +1586,8 @@ const Embarques = () => {
                         const exp = intlField.exportador ? String(row[intlField.exportador] ?? "") : "";
                         const cont = intlField.container ? String(row[intlField.container] ?? "") : "";
                         const qtd = intlField.qtdContainer ? String(row[intlField.qtdContainer] ?? "") : "";
-                        const valor = intlField.valor ? detectQty(row[intlField.valor]) : 0;
+                        const valor = intlColumns[16] ? detectQty(row[intlColumns[16]]) : 0;   // col Q — VALOR P.O
+                        const frete = intlColumns[32] ? detectQty(row[intlColumns[32]]) : 0;   // col AG — CUSTO TOTAL FINAL
                         const pracoRaw = intlField.praco ? row[intlField.praco] : null;
                         const praco = pracoRaw ? (formatDate(pracoRaw) ?? String(pracoRaw)) : "";
                         const contLower = cont.toLowerCase();
@@ -1604,11 +1605,24 @@ const Embarques = () => {
                                   </p>
                                 )}
                               </div>
-                              {valor > 0 && (
-                                <p className="text-base font-bold text-emerald-500">
-                                  $ {valor.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                </p>
-                              )}
+                              <div className="flex items-start gap-3 text-right">
+                                {valor > 0 && (
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">P.O</p>
+                                    <p className="text-sm font-bold text-blue-500">
+                                      $ {valor.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    </p>
+                                  </div>
+                                )}
+                                {frete > 0 && (
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Frete</p>
+                                    <p className="text-sm font-bold text-emerald-500">
+                                      $ {frete.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
                               {praco && (
