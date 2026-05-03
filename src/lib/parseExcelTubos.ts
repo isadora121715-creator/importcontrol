@@ -38,6 +38,10 @@ const TUBOS_COL_MAP: Record<string, keyof PedidoRow> = {
   "descricao": "descricao",
   "descri cao": "descricao",
   "qty": "qtyVenda",
+  "qty/mtr": "qtyVenda",
+  "qty/pieces": "qtyVenda",
+  "qty/pcs": "qtyVenda",
+  "qtd": "qtyVenda",
   "preco venda": "precoVenda",
   "preco venda total": "precoVendaTotal",
   "prazo cliente": "prazoCliente",
@@ -55,6 +59,25 @@ const TUBOS_COL_MAP: Record<string, keyof PedidoRow> = {
   "fornecedor": "fornecedor",
   "preco compra": "precoCompra",
   "preco compra total": "precoCompraTotal",
+  // Aliases para preço unitário de compra (formato Tubos)
+  "preco unit $": "precoCompra",
+  "preco unit": "precoCompra",
+  "preco unit ": "precoCompra",
+  "preco unit (usd)": "precoCompra",
+  "preco unit usd": "precoCompra",
+  "preco un": "precoCompra",
+  "preco un $": "precoCompra",
+  "unit price": "precoCompra",
+  "unit price ($)": "precoCompra",
+  "unit price $": "precoCompra",
+  // Quantidade de compra
+  "final qty": "qtyCompra",
+  "qty compra": "qtyCompra",
+  "qty compra ": "qtyCompra",
+  "qtd comprada": "qtyCompra",
+  "qtd. comprada": "qtyCompra",
+  "qty total": "qtyCompra",
+  "total qty": "qtyCompra",
   "peso (kg)": "peso",
   "data da compra": "dataCompra",
   "prazo inicial fornecedor": "prazoInicialFornecedor",
@@ -127,10 +150,13 @@ export function parseExcelTubos(file: File): Promise<PedidoRow[]> {
             const norm = normalize(headers[hdrIdx]);
             const field = TUBOS_COL_MAP[norm];
             if (field) {
-              if (DATE_FIELDS.has(field as string) && typeof value === "number") {
-                mapped[field] = excelDateToString(value);
-              } else if (value !== null && value !== undefined && value !== "") {
-                mapped[field] = value;
+              // Don't overwrite existing values (prefer first occurrence)
+              if (mapped[field] === undefined) {
+                if (DATE_FIELDS.has(field as string) && typeof value === "number") {
+                  mapped[field] = excelDateToString(value);
+                } else if (value !== null && value !== undefined && value !== "") {
+                  mapped[field] = value;
+                }
               }
             }
           }
