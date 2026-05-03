@@ -514,7 +514,11 @@ const Embarques = () => {
   };
 
   const intlStats = useMemo(() => {
-    const rows = intlRows;
+    // Exclui linha de totais (coluna D = "-") de todas as estatísticas
+    const rows = intlRows.filter((r) => {
+      const poVal = intlColumns[3] ? String(r[intlColumns[3]] ?? "").trim() : "";
+      return poVal !== "-";
+    });
     const containers = { "20ft": 0, "40ft": 0, "45ft": 0 };
     const modalidades = { LCL: 0, FCL: 0, Aereo: 0 };
     const exportadores = new Set<string>();
@@ -594,6 +598,10 @@ const Embarques = () => {
 
   const intlRowsFiltradas = useMemo(() => {
     return intlRows.filter((r) => {
+      // Ignora sempre a linha de totais (coluna D = "-")
+      const poVal = intlColumns[3] ? String(r[intlColumns[3]] ?? "").trim() : "";
+      if (poVal === "-") return false;
+
       if (intlFilterTipos.length > 0 && intlField.container) {
         const cont = String(r[intlField.container] ?? "").toLowerCase();
         const match = intlFilterTipos.some((t) => cont.includes(t.toLowerCase()));
