@@ -640,6 +640,8 @@ const Embarques = () => {
     const agentesSet = new Set<string>();
     let pesoTotal = 0;
     let valorTotal = 0;
+    let custoFinalTotal = 0;
+    let valorPOTotal = 0;
     const mesesSet = new Set<string>();
     const monthMap = new Map<string, { containers: number; peso: number; qty20: number; qty40: number; qty45: number }>();
     rows.forEach((r) => {
@@ -661,6 +663,11 @@ const Embarques = () => {
       if (intlField.agente && r[intlField.agente]) agentesSet.add(String(r[intlField.agente]));
       if (intlField.peso) pesoTotal += detectQty(r[intlField.peso]);
       if (intlField.valor) valorTotal += detectQty(r[intlField.valor]);
+      // Custo Total Final (col AG = índice 32) e Valor P.O (col Q = índice 16)
+      const colAG = intlColumns[32];
+      const colQ  = intlColumns[16];
+      if (colAG) custoFinalTotal += detectQty(r[colAG]);
+      if (colQ)  valorPOTotal    += detectQty(r[colQ]);
       if (intlField.mes) {
         const mk = detectMonth(r[intlField.mes]);
         if (mk) {
@@ -700,7 +707,7 @@ const Embarques = () => {
       qty45: monthMap.get(mk)?.qty45 ?? 0,
       peso: monthMap.get(mk)?.peso ?? 0,
     }));
-    return { containers: containersFinal, modalidades: modalidadesFinal, agentes: agentesSet.size, pesoTotal, valorTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
+    return { containers: containersFinal, modalidades: modalidadesFinal, agentes: agentesSet.size, pesoTotal, valorTotal, custoFinalTotal, valorPOTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
   }, [intlRowsFiltradas, intlField, intlTotals, intlFilterTipos, intlFilterPO, intlFilterExps, intlFilterAgentes, intlFilterMeses]);
 
   const formatBRLIntl = (v: number) =>
@@ -1326,10 +1333,20 @@ const Embarques = () => {
                       </div>
                     </div>
 
-                    {/* Valor total */}
+                    {/* Valor Total de Fretes (col AG — Custo Total Final) */}
                     <div className="rounded-lg border-2 border-emerald-500/40 p-4">
                       <p className="text-sm text-emerald-500 font-semibold">Valor Total de Fretes</p>
-                      <p className="text-2xl font-bold text-emerald-500">{formatBRLIntl(intlKpis.valorTotal)}</p>
+                      <p className="text-2xl font-bold text-emerald-500">
+                        $ {intlKpis.custoFinalTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+
+                    {/* Total Valor P.O (col Q) */}
+                    <div className="rounded-lg border-2 border-blue-500/40 p-4">
+                      <p className="text-sm text-blue-500 font-semibold">Total Valor P.O</p>
+                      <p className="text-2xl font-bold text-blue-500">
+                        $ {intlKpis.valorPOTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
                     </div>
 
                     {/* Filtros */}
