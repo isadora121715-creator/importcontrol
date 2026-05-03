@@ -57,6 +57,10 @@
 
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  --color-primary-glow: hsl(var(--primary-glow));
+  --color-accent-cyan: hsl(var(--accent-cyan));
+  --color-accent-violet: hsl(var(--accent-violet));
 }
 
 :root {
