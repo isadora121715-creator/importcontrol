@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { FreightAnalyzer } from "@/components/FreightAnalyzer";
 
 const STORAGE_FCL_KEY = "embarques.fretes_fcl.v2";
 const STORAGE_INTL_KEY = "embarques.fretes_internacionais.v4";
@@ -1111,6 +1112,9 @@ const Embarques = () => {
 
           {/* ============================== FRETES ============================== */}
           <TabsContent value="fretes" className="space-y-6 mt-6">
+            <div className="flex justify-end">
+              <FreightAnalyzer />
+            </div>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
               <Card>
                 <CardHeader>

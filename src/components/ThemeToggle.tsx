@@ -9,12 +9,10 @@ interface ThemeToggleProps {
 export function ThemeToggle({ sidebar = false }: ThemeToggleProps) {
   const [dark, setDark] = useState(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("theme");
-      if (stored) return stored === "dark";
-      // Default: follow system preference
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const saved = localStorage.getItem("theme");
+      return saved ? saved === "dark" : true;
     }
-    return false;
+    return true;
   });
 
   useEffect(() => {
