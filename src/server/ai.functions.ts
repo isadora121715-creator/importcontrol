@@ -29,6 +29,10 @@ async function callAI(messages: Array<{ role: string; content: string }>) {
   return data.choices?.[0]?.message?.content ?? "";
 }
 
+// ─────────────────────────────────────────────────────────────────
+// analyzeFreight — returns structured JSON for card rendering
+// ─────────────────────────────────────────────────────────────────
+
 export const analyzeFreight = createServerFn({ method: "POST" })
   .inputValidator((input) =>
     z
@@ -38,27 +42,59 @@ export const analyzeFreight = createServerFn({ method: "POST" })
         altura: z.number().positive(),
         comprimento: z.number().positive(),
         modal: z.string().min(1).max(50),
+        origem: z.string().max(80).optional(),
+        destino: z.string().max(80).optional(),
+        incoterm: z.string().max(20).optional(),
       })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const prompt = `Você é um especialista em logística internacional.
-Analise os dados:
-- Peso: ${data.peso} kg
-- Dimensões (L x A x C): ${data.largura} x ${data.altura} x ${data.comprimento} cm
-- Modal escolhido: ${data.modal}
+    const volume = (data.largura * data.altura * data.comprimento) / 1_000_000;
+    const pesoCubado = volume * 167; // fator aéreo padrão
+    const origemStr = data.origem ? `Origem: ${data.origem}` : "";
+    const destinoStr = data.destino ? `Destino: ${data.destino}` : "";
+    const incotermStr = data.incoterm ? `Incoterm: ${data.incoterm}` : "";
 
-Regras:
-- Carga pequena → sugerir LCL ou aéreo
-- Carga volumosa → sugerir FCL
-- Sempre recomendar melhor custo-benefício
+    const prompt = `Você é especialista em logística internacional. Analise a carga abaixo e responda SOMENTE com JSON válido — sem texto extra, sem markdown, sem comentários.
 
-Responda em markdown com seções:
-**Melhor modal**, **Justificativa**, **Economia estimada**, **Tempo médio**.`;
+DADOS DA CARGA:
+- Peso real: ${data.peso} kg
+- Volume: ${volume.toFixed(3)} m³ (${data.largura}×${data.altura}×${data.comprimento} cm)
+- Peso cubado aéreo: ${pesoCubado.toFixed(0)} kg
+- Modal solicitado: ${data.modal}
+${origemStr ? `\n${origemStr}` : ""}${destinoStr ? `\n${destinoStr}` : ""}${incotermStr ? `\n${incotermStr}` : ""}
 
-    const result = await callAI([{ role: "user", content: prompt }]);
-    return { result };
+Retorne EXATAMENTE este JSON (sem campos extras, preencha null se não souber):
+{
+  "recomendacao": "FCL" | "LCL" | "Aéreo",
+  "modal_adequado": true | false,
+  "volume_cbm": ${volume.toFixed(3)},
+  "peso_taxavel": ${Math.max(data.peso, pesoCubado).toFixed(0)},
+  "justificativa": "1-2 frases explicando a recomendação",
+  "tempo_transito": "X a Y dias úteis",
+  "custo_relativo": "Baixo" | "Médio" | "Alto",
+  "alternativa_modal": "outro modal viável ou null",
+  "alternativa_motivo": "por que considerar a alternativa ou null",
+  "alerta": "observação de risco ou atenção especial, ou null",
+  "dica": "dica prática de otimização de custo, ou null"
+}`;
+
+    const raw = await callAI([{ role: "user", content: prompt }]);
+
+    // Strip possible markdown code fences
+    const cleaned = raw.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      return { ok: true as const, data: parsed };
+    } catch {
+      return { ok: false as const, raw };
+    }
   });
+
+// ─────────────────────────────────────────────────────────────────
+// chatComex — with optional dashboard context from client
+// ─────────────────────────────────────────────────────────────────
 
 export const chatComex = createServerFn({ method: "POST" })
   .inputValidator((input) =>
@@ -73,16 +109,31 @@ export const chatComex = createServerFn({ method: "POST" })
           )
           .min(1)
           .max(30),
+        context: z.string().max(6000).optional(),
       })
       .parse(input),
   )
   .handler(async ({ data }) => {
+    const systemPrompt = data.context
+      ? `Você é assistente especializado em comércio exterior e logística internacional da empresa HCI.
+Regras:
+- Respostas DIRETAS e CURTAS — máximo 3 parágrafos para temas gerais
+- Para consultas de dados (PO, PI, datas, status): responda em no máximo 3 linhas com o dado exato
+- Não use formalismos desnecessários, sem "Claro!", "Com certeza!" ou introduções longas
+- Use listas apenas quando listar 3+ itens
+- Português brasileiro
+
+DADOS DO SISTEMA (use como fonte primária para responder):
+${data.context}`
+      : `Você é assistente especializado em comércio exterior e logística internacional da empresa HCI.
+Regras:
+- Respostas DIRETAS e CURTAS — máximo 3 parágrafos
+- Não use formalismos nem introduções longas
+- Use listas apenas quando listar 3+ itens
+- Português brasileiro`;
+
     const reply = await callAI([
-      {
-        role: "system",
-        content:
-          "Você é um especialista em comércio exterior, importação, fretes internacionais e custos logísticos. Responda em português, de forma clara, objetiva e prática.",
-      },
+      { role: "system", content: systemPrompt },
       ...data.messages,
     ]);
     return { reply };
