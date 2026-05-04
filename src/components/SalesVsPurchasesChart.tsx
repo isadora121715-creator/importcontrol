@@ -64,7 +64,7 @@ export function SalesVsPurchasesChart({ data }: { data: PedidoRow[] }) {
       if (!monthMap.has(key)) monthMap.set(key, { vendas: 0, compras: 0, label, order: key });
       const entry = monthMap.get(key)!;
       if (d.precoVenda != null) entry.vendas += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) entry.compras += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) entry.compras += d.precoCompra * (d.qtyCompra ?? 1);
     });
     return Array.from(monthMap.values()).sort((a, b) => a.order.localeCompare(b.order));
   }, [data]);

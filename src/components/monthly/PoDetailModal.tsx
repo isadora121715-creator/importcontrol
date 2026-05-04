@@ -69,7 +69,7 @@ export function PoDetailModal({ po, data, onClose }: Props) {
 
     items.forEach((d) => {
       if (d.precoVenda != null) totalVenda += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) totalCompra += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) totalCompra += d.precoCompra * (d.qtyCompra ?? 1);
       if (d.fornecedor && fornecedor === "-") fornecedor = d.fornecedor;
       if (d.cliente) clientes.add(d.cliente);
 

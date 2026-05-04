@@ -78,7 +78,7 @@ export function GeralDashboardCards({ data }: { data: OrderData[] }) {
 
     data.forEach((d) => {
       if (d.precoVenda != null) valorVenda += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) valorCompra += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) valorCompra += d.precoCompra * (d.qtyCompra ?? 1);
 
       const embarque = (d.embarque || "").toUpperCase();
       if (embarque.includes("AER") || embarque.includes("AÉREO")) embarqueAereo++;

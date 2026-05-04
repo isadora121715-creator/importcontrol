@@ -105,7 +105,7 @@ export function DashboardCards({
     let totalCompra = 0;
     data.forEach((d) => {
       if (d.precoVenda != null) totalVenda += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) totalCompra += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) totalCompra += d.precoCompra * (d.qtyCompra ?? 1);
     });
     return { totalVenda, totalCompra };
   }, [data]);

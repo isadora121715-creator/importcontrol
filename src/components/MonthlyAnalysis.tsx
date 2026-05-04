@@ -154,7 +154,7 @@ export function MonthlyAnalysis({ data }: MonthlyAnalysisProps) {
     // Financial KPIs from monthFilteredData
     monthFilteredData.forEach((d) => {
       if (d.precoVenda != null) faturamento += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) gastos += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) gastos += d.precoCompra * (d.qtyCompra ?? 1);
 
       // Prazo analysis: only for items that "Chegou" and chegadaHci in month
       if (isChegou(d.statusCompraVenda)) {
@@ -209,7 +209,7 @@ export function MonthlyAnalysis({ data }: MonthlyAnalysisProps) {
       }
       const entry = poMap.get(d.po)!;
       if (d.precoVenda != null) entry.venda += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) entry.compra += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) entry.compra += d.precoCompra * (d.qtyCompra ?? 1);
       if (d.fornecedor && entry.fornecedor === "-") entry.fornecedor = d.fornecedor;
     });
 
@@ -267,7 +267,7 @@ export function MonthlyAnalysis({ data }: MonthlyAnalysisProps) {
       // If any item in the PO has "Chegou", mark the whole PO as not previsão
       if (chegou) entry.previsao = false;
       if (d.precoVenda != null) entry.venda += d.precoVenda * (d.qtyVenda ?? 1);
-      if (d.precoCompra != null) entry.compra += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      if (d.precoCompra != null) entry.compra += d.precoCompra * (d.qtyCompra ?? 1);
       if (d.fornecedor && entry.fornecedor === "-") entry.fornecedor = d.fornecedor;
     });
 
@@ -296,8 +296,8 @@ export function MonthlyAnalysis({ data }: MonthlyAnalysisProps) {
       const name = d.descricao?.split(/\s+/)[0]?.toUpperCase() || "OUTROS";
       if (!materialMap.has(name)) materialMap.set(name, { qty: 0, value: 0 });
       const entry = materialMap.get(name)!;
-      entry.qty += d.qtyCompra ?? d.qtyVenda ?? 1;
-      if (d.precoCompra != null) entry.value += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      entry.qty += d.qtyCompra ?? 1;
+      if (d.precoCompra != null) entry.value += d.precoCompra * (d.qtyCompra ?? 1);
     });
     return Array.from(materialMap.entries())
       .map(([name, stats]) => ({ name, ...stats }))

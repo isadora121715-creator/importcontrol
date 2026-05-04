@@ -31,8 +31,8 @@ export function MaterialDetailModal({ material, data, onClose }: Props) {
         poMap.set(poKey, { po: poKey, fornecedor: d.fornecedor || "-", cliente: d.cliente || "-", qty: 0, value: 0 });
       }
       const entry = poMap.get(poKey)!;
-      entry.qty += d.qtyCompra ?? d.qtyVenda ?? 1;
-      if (d.precoCompra != null) entry.value += d.precoCompra * (d.qtyCompra ?? d.qtyVenda ?? 1);
+      entry.qty += d.qtyCompra ?? 1;
+      if (d.precoCompra != null) entry.value += d.precoCompra * (d.qtyCompra ?? 1);
       if (d.cliente && entry.cliente === "-") entry.cliente = d.cliente;
       if (d.fornecedor && entry.fornecedor === "-") entry.fornecedor = d.fornecedor;
     });
