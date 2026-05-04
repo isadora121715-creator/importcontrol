@@ -56,8 +56,18 @@ export function ShipmentTypeChart({ data }: { data: OrderData[] }) {
                 <Cell key={entry.name} fill={COLORS[entry.name] || "hsl(var(--muted-foreground))"} />
               ))}
             </Pie>
-            <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Tooltip
+              contentStyle={{
+                borderRadius: 10,
+                border: "1px solid hsl(var(--border))",
+                background: "hsl(var(--card))",
+                color: "hsl(var(--card-foreground))",
+                fontSize: 12,
+              }}
+              itemStyle={{ color: "hsl(var(--card-foreground))" }}
+              labelStyle={{ color: "hsl(var(--card-foreground))", fontWeight: 600 }}
+            />
+            <Legend wrapperStyle={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }} />
           </PieChart>
         </ResponsiveContainer>
       </CardContent>

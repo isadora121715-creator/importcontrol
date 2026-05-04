@@ -60,73 +60,73 @@
 }
 
 :root {
-  --background: 220 20% 97%;
-  --foreground: 220 30% 10%;
+  --background: 220 22% 96%;
+  --foreground: 222 35% 10%;
   --card: 0 0% 100%;
-  --card-foreground: 220 30% 10%;
+  --card-foreground: 222 35% 10%;
   --popover: 0 0% 100%;
-  --popover-foreground: 220 30% 10%;
-  --primary: 215 80% 48%;
+  --popover-foreground: 222 35% 10%;
+  --primary: 217 91% 53%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 15% 92%;
-  --secondary-foreground: 220 30% 15%;
-  --muted: 220 15% 95%;
-  --muted-foreground: 220 10% 50%;
-  --accent: 215 80% 48%;
+  --secondary: 220 16% 91%;
+  --secondary-foreground: 220 30% 18%;
+  --muted: 220 16% 94%;
+  --muted-foreground: 220 12% 48%;
+  --accent: 217 91% 53%;
   --accent-foreground: 0 0% 100%;
-  --destructive: 0 72% 51%;
+  --destructive: 0 74% 52%;
   --destructive-foreground: 0 0% 100%;
-  --border: 220 15% 90%;
-  --input: 220 15% 90%;
-  --ring: 215 80% 48%;
-  --radius: 0.625rem;
+  --border: 220 16% 88%;
+  --input: 220 16% 88%;
+  --ring: 217 91% 53%;
+  --radius: 0.75rem;
 
-  --sidebar-background: 220 25% 12%;
-  --sidebar-foreground: 220 10% 85%;
-  --sidebar-primary: 215 80% 55%;
+  --sidebar-background: 222 47% 11%;
+  --sidebar-foreground: 215 20% 80%;
+  --sidebar-primary: 217 91% 58%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 20% 18%;
-  --sidebar-accent-foreground: 220 10% 85%;
-  --sidebar-border: 220 20% 20%;
-  --sidebar-ring: 215 80% 55%;
+  --sidebar-accent: 221 39% 16%;
+  --sidebar-accent-foreground: 215 20% 80%;
+  --sidebar-border: 221 35% 17%;
+  --sidebar-ring: 217 91% 58%;
 
-  --status-on-time: 145 63% 42%;
-  --status-atrasado: 0 72% 51%;
-  --status-critico: 25 95% 53%;
-  --status-chegou: 215 80% 48%;
-  --status-estoque: 220 10% 50%;
-  --status-verificar: 45 93% 47%;
-  --status-no-prazo: 145 63% 42%;
+  --status-on-time: 152 69% 38%;
+  --status-atrasado: 0 74% 52%;
+  --status-critico: 25 95% 50%;
+  --status-chegou: 217 91% 53%;
+  --status-estoque: 220 12% 48%;
+  --status-verificar: 43 96% 47%;
+  --status-no-prazo: 152 69% 38%;
 }
 
 .dark {
-  --background: 220 25% 8%;
-  --foreground: 220 10% 92%;
-  --card: 220 25% 12%;
-  --card-foreground: 220 10% 92%;
-  --popover: 220 25% 12%;
-  --popover-foreground: 220 10% 92%;
-  --primary: 215 80% 55%;
+  --background: 222 47% 7%;
+  --foreground: 214 20% 91%;
+  --card: 222 40% 10%;
+  --card-foreground: 214 20% 91%;
+  --popover: 222 40% 10%;
+  --popover-foreground: 214 20% 91%;
+  --primary: 217 91% 58%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 20% 18%;
-  --secondary-foreground: 220 10% 85%;
-  --muted: 220 20% 15%;
-  --muted-foreground: 220 10% 55%;
-  --accent: 215 80% 55%;
+  --secondary: 221 35% 16%;
+  --secondary-foreground: 215 20% 82%;
+  --muted: 222 35% 14%;
+  --muted-foreground: 215 15% 52%;
+  --accent: 217 91% 58%;
   --accent-foreground: 0 0% 100%;
-  --destructive: 0 62% 30.6%;
+  --destructive: 0 65% 45%;
   --destructive-foreground: 0 0% 100%;
-  --border: 220 20% 20%;
-  --input: 220 20% 20%;
-  --ring: 215 80% 55%;
-  --sidebar-background: 220 25% 6%;
-  --sidebar-foreground: 220 10% 85%;
-  --sidebar-primary: 215 80% 55%;
+  --border: 221 30% 18%;
+  --input: 221 30% 18%;
+  --ring: 217 91% 58%;
+  --sidebar-background: 222 47% 5%;
+  --sidebar-foreground: 215 20% 78%;
+  --sidebar-primary: 217 91% 58%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 20% 12%;
-  --sidebar-accent-foreground: 220 10% 85%;
-  --sidebar-border: 220 20% 15%;
-  --sidebar-ring: 215 80% 55%;
+  --sidebar-accent: 222 40% 11%;
+  --sidebar-accent-foreground: 215 20% 78%;
+  --sidebar-border: 221 35% 13%;
+  --sidebar-ring: 217 91% 58%;
 }
 
 @layer base {
@@ -144,5 +144,47 @@
 @layer utilities {
   .font-mono {
     font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Subtle dot-grid background for main content areas */
+  .bg-grid-dots {
+    background-image: radial-gradient(circle, hsl(var(--foreground) / 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* Tabular/metric number rendering */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    letter-spacing: -0.025em;
+  }
+
+  /* Modern card hover lift */
+  .card-lift {
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px -6px rgb(0 0 0 / 0.12), 0 4px 10px -4px rgb(0 0 0 / 0.08);
+  }
+
+  /* Gradient text utilities */
+  .text-gradient-blue {
+    background: linear-gradient(135deg, #3b82f6, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, #10b981, #14b8a6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .text-gradient-violet {
+    background: linear-gradient(135deg, #8b5cf6, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }

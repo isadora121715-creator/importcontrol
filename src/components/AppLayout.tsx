@@ -79,7 +79,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* User + logout */}
+        {/* User + logout + theme toggle */}
         <div className="border-t px-3 py-3 space-y-2" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
           {!collapsed && profile && (
             <div className="px-1">
@@ -87,6 +87,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {profile.cargo && <p className="text-[10px] text-white/40 truncate">{profile.cargo}</p>}
             </div>
           )}
+          {/* Theme toggle row */}
+          <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} px-1`}>
+            {!collapsed && <span className="text-[11px] text-white/40">Tema</span>}
+            <ThemeToggle sidebar />
+          </div>
           <button
             onClick={signOut}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/50 hover:text-white hover:bg-white/10 transition-colors"

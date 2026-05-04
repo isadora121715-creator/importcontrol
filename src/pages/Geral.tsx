@@ -46,12 +46,23 @@ type PedidoSummary = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Conexões: "hsl(var(--primary))",
-  Tubos: "hsl(217 91% 60%)",
-  Válvulas: "hsl(38 92% 50%)",
+  Conexões: "#3b82f6",   // azul
+  Tubos:    "#f97316",   // laranja
+  Válvulas: "#10b981",   // verde
 };
 
-const SHIPMENT_COLORS = ["hsl(217 91% 60%)", "hsl(38 92% 50%)", "hsl(var(--muted-foreground))"];
+const SHIPMENT_COLORS = ["#3b82f6", "#f97316", "#64748b"];
+
+// Recharts tooltip style that respects the current CSS theme (light + dark)
+const tooltipStyle = {
+  background: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 10,
+  color: "hsl(var(--card-foreground))",
+  fontSize: 12,
+} as const;
+const tooltipItemStyle = { color: "hsl(var(--card-foreground))" } as const;
+const tooltipLabelStyle = { color: "hsl(var(--card-foreground))", fontWeight: 600, marginBottom: 4 } as const;
 
 const STATUS_GROUPS = {
   noPrazo: ["no prazo", "on time", "entregue em dia", "chegou", "ok", "dia"],
@@ -349,17 +360,18 @@ const Geral = () => {
           {kpis.map((k) => {
             const Icon = k.icon;
             return (
-              <Card key={k.label} className="border-none shadow-sm">
-                <CardContent className="flex items-center gap-4 p-5">
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${k.bg}`}>
-                    <Icon className={`h-6 w-6 ${k.color}`} />
+              <div key={k.label} className="relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm card-lift">
+                <div className="absolute inset-x-0 top-0 h-[2.5px] bg-gradient-to-r from-primary/80 to-primary/30" />
+                <div className="flex items-center gap-4 p-5 pt-6">
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${k.bg}`}>
+                    <Icon className={`h-5 w-5 ${k.color}`} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xl font-bold leading-tight break-words">{k.value}</p>
-                    <p className="mt-1 text-sm text-muted-foreground leading-snug">{k.label}</p>
+                    <p className="text-xl font-bold leading-tight break-words num">{k.value}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground font-medium leading-snug">{k.label}</p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             );
           })}
         </div>
@@ -373,13 +385,21 @@ const Geral = () => {
             <CardContent className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={stats.volumeByCategory}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="categoria" className="text-xs" />
-                  <YAxis className="text-xs" />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                  <Legend />
-                  <Bar dataKey="registros" name="Registros" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="pos" name="POs Únicas" fill="hsl(217 91% 60%)" radius={[6, 6, 0, 0]} />
+                  <CartesianGrid strokeDasharray="4 4" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
+                  <XAxis dataKey="categoria" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }} />
+                  <Bar dataKey="registros" name="Registros" radius={[6, 6, 0, 0]}>
+                    {stats.volumeByCategory.map((entry) => (
+                      <Cell key={`reg-${entry.categoria}`} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="pos" name="POs Únicas" radius={[6, 6, 0, 0]}>
+                    {stats.volumeByCategory.map((entry) => (
+                      <Cell key={`pos-${entry.categoria}`} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} fillOpacity={0.45} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -399,15 +419,18 @@ const Geral = () => {
                     cx="50%"
                     cy="50%"
                     outerRadius={110}
+                    strokeWidth={0}
                     label={(e: { categoria: string; valorCompra: number }) => `${e.categoria}: ${formatBRL(e.valorCompra)}`}
                   >
                     {stats.volumeByCategory.map((entry) => (
-                      <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "hsl(var(--muted-foreground))"} />
+                      <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
                     ))}
                   </Pie>
                   <Tooltip
                     formatter={(v: number) => formatBRL(v)}
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                    contentStyle={tooltipStyle}
+                    itemStyle={tooltipItemStyle}
+                    labelStyle={tooltipLabelStyle}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -423,17 +446,19 @@ const Geral = () => {
           <CardContent className="h-[340px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.performanceByCategory}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="categoria" className="text-xs" />
-                <YAxis className="text-xs" unit="%" />
+                <CartesianGrid strokeDasharray="4 4" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
+                <XAxis dataKey="categoria" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} unit="%" />
                 <Tooltip
                   formatter={(v: number) => `${v}%`}
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                  contentStyle={tooltipStyle}
+                  itemStyle={tooltipItemStyle}
+                  labelStyle={tooltipLabelStyle}
                 />
-                <Legend />
-                <Bar dataKey="No Prazo" stackId="a" fill="hsl(142 71% 45%)" />
-                <Bar dataKey="Em Andamento" stackId="a" fill="hsl(217 91% 60%)" />
-                <Bar dataKey="Atrasado" stackId="a" fill="hsl(0 84% 60%)" />
+                <Legend wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }} />
+                <Bar dataKey="No Prazo" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Em Andamento" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Atrasado" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -451,16 +476,18 @@ const Geral = () => {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={stats.monthlySeries}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="mes" className="text-xs" />
-                    <YAxis className="text-xs" tickFormatter={(v) => `R$ ${(v / 1000).toLocaleString("pt-BR")}k`} />
+                    <CartesianGrid strokeDasharray="4 4" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${((v as number) / 1000).toFixed(0)}k`} />
                     <Tooltip
                       formatter={(v: number) => formatBRL(v)}
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                      contentStyle={tooltipStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
                     />
-                    <Legend />
-                    <Line type="monotone" dataKey="Vendas" stroke="hsl(142 71% 45%)" strokeWidth={2.5} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="Compras" stroke="hsl(217 91% 60%)" strokeWidth={2.5} dot={{ r: 3 }} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }} />
+                    <Line type="monotone" dataKey="Vendas" stroke="#10b981" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#10b981", stroke: "#fff", strokeWidth: 2 }} />
+                    <Line type="monotone" dataKey="Compras" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#3b82f6", stroke: "#fff", strokeWidth: 2 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -491,8 +518,8 @@ const Geral = () => {
                         <Cell key={entry.nome} fill={SHIPMENT_COLORS[i % SHIPMENT_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                    <Legend />
+                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
