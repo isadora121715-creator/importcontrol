@@ -1170,8 +1170,13 @@ export default function Precificacao() {
                   <tbody>
                     {calcs.map(({ item, c }) => (
                       <tr key={item.id} className={cn("border-b last:border-0 hover:bg-muted/30 transition-colors", c.abaixoMinimo && "bg-red-50 dark:bg-red-950/20")}>
-                        <td className="px-3 py-2 font-medium">{item.descricao}</td>
-                        <td className="px-3 py-2 text-center">{c.qtd}</td>
+                        <td className="px-3 py-2 font-medium">
+                          <div>{item.descricao}</div>
+                          {item.fornecedor && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{item.fornecedor}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">{c.qtd}{item.unidade ? ` ${item.unidade}` : ""}</td>
                         <td className="px-3 py-2 num">$ {c.custoUnitUSD.toFixed(2)}</td>
                         <td className="px-3 py-2 num">$ {(Number(item.freteUSD) / c.qtd || 0).toFixed(2)}</td>
                         <td className="px-3 py-2 num">{c.custoUnitBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
