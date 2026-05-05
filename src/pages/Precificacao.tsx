@@ -987,6 +987,8 @@ export default function Precificacao() {
                                 saveItems([...vendaItems, {
                                   id: Date.now().toString(),
                                   descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
+                                  fornecedor: c.fornecedor ?? "",
+                                  unidade: "UN",
                                   precoCompraUSD: String(c.precoCompraUSD),
                                   qtd: String(c.qtd),
                                   freteUSD: String(c.freteUSD),
