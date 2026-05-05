@@ -48,6 +48,8 @@ interface CotacaoSalva {
 interface VendaItem {
   id: string;
   descricao: string;
+  fornecedor: string;
+  unidade: string;
   precoCompraUSD: string;
   qtd: string;
   freteUSD: string;
@@ -64,6 +66,8 @@ const VENDA_STORAGE_KEY = "embarques.simulador_venda.v1";
 
 const FORM_EMPTY: Omit<VendaItem, "id"> = {
   descricao: "",
+  fornecedor: "",
+  unidade: "UN",
   precoCompraUSD: "",
   qtd: "1",
   freteUSD: "",
