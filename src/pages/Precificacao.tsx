@@ -1109,6 +1109,16 @@ export default function Precificacao() {
                   </div>
                 </div>
                 <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Fornecedor</label>
+                  <Input placeholder="Nome do fornecedor" value={vendaForm.fornecedor}
+                    onChange={(e) => setVendaForm((f) => ({ ...f, fornecedor: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Unidade</label>
+                  <Input placeholder="UN" value={vendaForm.unidade}
+                    onChange={(e) => setVendaForm((f) => ({ ...f, unidade: e.target.value }))} />
+                </div>
+                <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Preço Compra (USD/un)</label>
                   <Input type="number" min="0" placeholder="0.00" value={vendaForm.precoCompraUSD}
                     onChange={(e) => setVendaForm((f) => ({ ...f, precoCompraUSD: e.target.value }))} />
