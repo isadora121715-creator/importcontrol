@@ -240,6 +240,31 @@ export default function Precificacao() {
     } catch { return []; }
   });
   const [vendaForm, setVendaForm] = useState<Omit<VendaItem, "id">>(FORM_EMPTY);
+  const [vendaSearch, setVendaSearch] = useState("");
+  const [vendaShowDropdown, setVendaShowDropdown] = useState(false);
+  const vendaSearchRef = useRef<HTMLDivElement>(null);
+  const { results: vendaResults, loading: vendaLoading } = useProductSearch(vendaSearch);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (vendaSearchRef.current && !vendaSearchRef.current.contains(e.target as Node)) {
+        setVendaShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelectVendaProduct = (item: CatalogoItem) => {
+    const desc = item.codigo ? `${item.codigo} - ${item.descricao}` : item.descricao;
+    setVendaForm((f) => ({
+      ...f,
+      descricao: desc,
+      precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
+    }));
+    setVendaSearch(desc);
+    setVendaShowDropdown(false);
+  };
 
   const saveItems = (items: VendaItem[]) => {
     setVendaItems(items);
