@@ -48,6 +48,8 @@ interface CotacaoSalva {
 interface VendaItem {
   id: string;
   descricao: string;
+  fornecedor: string;
+  unidade: string;
   precoCompraUSD: string;
   qtd: string;
   freteUSD: string;
@@ -64,6 +66,8 @@ const VENDA_STORAGE_KEY = "embarques.simulador_venda.v1";
 
 const FORM_EMPTY: Omit<VendaItem, "id"> = {
   descricao: "",
+  fornecedor: "",
+  unidade: "UN",
   precoCompraUSD: "",
   qtd: "1",
   freteUSD: "",
@@ -260,6 +264,8 @@ export default function Precificacao() {
     setVendaForm((f) => ({
       ...f,
       descricao: desc,
+      fornecedor: item.fornecedores[0] ?? f.fornecedor,
+      unidade: f.unidade || "UN",
       precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
     }));
     setVendaSearch(desc);
@@ -983,6 +989,8 @@ export default function Precificacao() {
                                 saveItems([...vendaItems, {
                                   id: Date.now().toString(),
                                   descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
+                                  fornecedor: c.fornecedor ?? "",
+                                  unidade: "UN",
                                   precoCompraUSD: String(c.precoCompraUSD),
                                   qtd: String(c.qtd),
                                   freteUSD: String(c.freteUSD),
@@ -1101,6 +1109,16 @@ export default function Precificacao() {
                   </div>
                 </div>
                 <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Fornecedor</label>
+                  <Input placeholder="Nome do fornecedor" value={vendaForm.fornecedor}
+                    onChange={(e) => setVendaForm((f) => ({ ...f, fornecedor: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Unidade</label>
+                  <Input placeholder="UN" value={vendaForm.unidade}
+                    onChange={(e) => setVendaForm((f) => ({ ...f, unidade: e.target.value }))} />
+                </div>
+                <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Preço Compra (USD/un)</label>
                   <Input type="number" min="0" placeholder="0.00" value={vendaForm.precoCompraUSD}
                     onChange={(e) => setVendaForm((f) => ({ ...f, precoCompraUSD: e.target.value }))} />
@@ -1152,8 +1170,13 @@ export default function Precificacao() {
                   <tbody>
                     {calcs.map(({ item, c }) => (
                       <tr key={item.id} className={cn("border-b last:border-0 hover:bg-muted/30 transition-colors", c.abaixoMinimo && "bg-red-50 dark:bg-red-950/20")}>
-                        <td className="px-3 py-2 font-medium">{item.descricao}</td>
-                        <td className="px-3 py-2 text-center">{c.qtd}</td>
+                        <td className="px-3 py-2 font-medium">
+                          <div>{item.descricao}</div>
+                          {item.fornecedor && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{item.fornecedor}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">{c.qtd}{item.unidade ? ` ${item.unidade}` : ""}</td>
                         <td className="px-3 py-2 num">$ {c.custoUnitUSD.toFixed(2)}</td>
                         <td className="px-3 py-2 num">$ {(Number(item.freteUSD) / c.qtd || 0).toFixed(2)}</td>
                         <td className="px-3 py-2 num">{c.custoUnitBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
