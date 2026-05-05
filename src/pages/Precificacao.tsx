@@ -264,6 +264,8 @@ export default function Precificacao() {
     setVendaForm((f) => ({
       ...f,
       descricao: desc,
+      fornecedor: item.fornecedores[0] ?? f.fornecedor,
+      unidade: f.unidade || "UN",
       precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
     }));
     setVendaSearch(desc);
