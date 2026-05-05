@@ -240,6 +240,31 @@ export default function Precificacao() {
     } catch { return []; }
   });
   const [vendaForm, setVendaForm] = useState<Omit<VendaItem, "id">>(FORM_EMPTY);
+  const [vendaSearch, setVendaSearch] = useState("");
+  const [vendaShowDropdown, setVendaShowDropdown] = useState(false);
+  const vendaSearchRef = useRef<HTMLDivElement>(null);
+  const { results: vendaResults, loading: vendaLoading } = useProductSearch(vendaSearch);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (vendaSearchRef.current && !vendaSearchRef.current.contains(e.target as Node)) {
+        setVendaShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelectVendaProduct = (item: CatalogoItem) => {
+    const desc = item.codigo ? `${item.codigo} - ${item.descricao}` : item.descricao;
+    setVendaForm((f) => ({
+      ...f,
+      descricao: desc,
+      precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
+    }));
+    setVendaSearch(desc);
+    setVendaShowDropdown(false);
+  };
 
   const saveItems = (items: VendaItem[]) => {
     setVendaItems(items);
@@ -1029,12 +1054,51 @@ export default function Precificacao() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="md:col-span-2">
                   <label className="text-xs text-muted-foreground mb-1 block">Descrição / Código</label>
-                  <Input
-                    placeholder="Ex: Válvula DN50 PN16"
-                    value={vendaForm.descricao}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, descricao: e.target.value }))}
-                    onKeyDown={(e) => e.key === "Enter" && addItem()}
-                  />
+                  <div ref={vendaSearchRef} className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="Pesquise por código ou descrição..."
+                        value={vendaSearch}
+                        className="pl-8"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setVendaSearch(v);
+                          setVendaForm((f) => ({ ...f, descricao: v }));
+                          setVendaShowDropdown(true);
+                        }}
+                        onFocus={() => setVendaShowDropdown(true)}
+                        onKeyDown={(e) => e.key === "Enter" && addItem()}
+                      />
+                    </div>
+                    {vendaShowDropdown && vendaSearch.trim().length >= 2 && (
+                      <div className="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg">
+                        {vendaLoading && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>
+                        )}
+                        {!vendaLoading && vendaResults.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum item encontrado.</div>
+                        )}
+                        {vendaResults.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleSelectVendaProduct(item)}
+                            className="w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-0 transition-colors"
+                          >
+                            <p className="text-xs font-semibold truncate">{item.descricao || item.codigo}</p>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                              {item.codigo && <span className="font-mono">{item.codigo}</span>}
+                              {item.preco_compra != null && (
+                                <span className="text-primary">USD {item.preco_compra.toFixed(2)}</span>
+                              )}
+                              {item.fornecedores[0] && <span className="truncate">• {item.fornecedores[0]}</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Preço Compra (USD/un)</label>
