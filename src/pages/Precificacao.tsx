@@ -144,25 +144,69 @@ function useProductSearch(query: string) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
-          .from("catalogo_materiais")
-          .select("id, codigo, descricao, preco_compra, fornecedores, categorias")
-          .or(`codigo.ilike.%${query}%,descricao.ilike.%${query}%`)
-          .order("ultima_atualizacao", { ascending: false })
-          .limit(12);
-        setResults(
+        const filter = `codigo.ilike.%${query}%,descricao.ilike.%${query}%`;
+        const [catRes, pedRes] = await Promise.all([
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((data ?? []) as any[]).map((r) => ({
+          (supabase as any)
+            .from("catalogo_materiais")
+            .select("id, codigo, descricao, preco_compra, fornecedores, categorias")
+            .or(filter)
+            .order("ultima_atualizacao", { ascending: false })
+            .limit(15),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("pedidos")
+            .select("id, codigo, descricao, preco_compra, fornecedor, categoria")
+            .or(filter)
+            .order("created_at", { ascending: false })
+            .limit(30),
+        ]);
+
+        const merged = new Map<string, CatalogoItem>();
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of (catRes.data ?? []) as any[]) {
+          const key = (r.codigo || r.descricao || r.id || "").toString().trim().toUpperCase();
+          if (!key) continue;
+          merged.set(key, {
             id: r.id as string,
-            codigo: r.codigo as string ?? "",
-            descricao: r.descricao as string ?? "",
+            codigo: (r.codigo as string) ?? "",
+            descricao: (r.descricao as string) ?? "",
             preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
             preco_venda: null,
             fornecedores: (r.fornecedores as string[]) ?? [],
             categorias: (r.categorias as string[]) ?? [],
-          })),
-        );
+          });
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of (pedRes.data ?? []) as any[]) {
+          const codigo = ((r.codigo as string) ?? "").trim();
+          const descricao = ((r.descricao as string) ?? "").trim();
+          const key = (codigo || descricao).toUpperCase();
+          if (!key) continue;
+          const fornecedor = ((r.fornecedor as string) ?? "").trim();
+          const categoria = ((r.categoria as string) ?? "").trim();
+          const preco = r.preco_compra != null ? Number(r.preco_compra) : null;
+          const existing = merged.get(key);
+          if (existing) {
+            if (existing.preco_compra == null && preco != null) existing.preco_compra = preco;
+            if (fornecedor && !existing.fornecedores.includes(fornecedor)) existing.fornecedores.push(fornecedor);
+            if (categoria && !existing.categorias.includes(categoria)) existing.categorias.push(categoria);
+          } else {
+            merged.set(key, {
+              id: `pedido:${r.id}`,
+              codigo,
+              descricao,
+              preco_compra: preco,
+              preco_venda: null,
+              fornecedores: fornecedor ? [fornecedor] : [],
+              categorias: categoria ? [categoria] : [],
+            });
+          }
+        }
+
+        setResults(Array.from(merged.values()).slice(0, 20));
       } catch {
         setResults([]);
       } finally {
