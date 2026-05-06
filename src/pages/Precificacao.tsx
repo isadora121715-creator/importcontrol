@@ -3,7 +3,11 @@ import {
   DollarSign, Percent, Trash2, TrendingUp, Search, BookmarkPlus,
   ChevronDown, ChevronUp, Building2, Package, Clock, Star, X,
   FileText, Calculator, History, AlertCircle, CheckCircle2,
+  Folder, FolderOpen, Download, FileSpreadsheet, FileDown,
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
