@@ -408,68 +408,138 @@ const Geral = () => {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Distribuição de Valor por Categoria (Compra $)</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Distribuição de Valor — Compra ($)</CardTitle>
             </CardHeader>
-            <CardContent className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.volumeByCategory}
-                    dataKey="valorCompra"
-                    nameKey="categoria"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    strokeWidth={0}
-                    label={(e: { categoria: string; valorCompra: number }) => `${e.categoria}: ${formatUSD(e.valorCompra)}`}
-                    labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
-                  >
-                    {stats.volumeByCategory.map((entry) => (
-                      <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v: number) => formatUSD(v)}
-                    contentStyle={tooltipStyle}
-                    itemStyle={tooltipItemStyle}
-                    labelStyle={tooltipLabelStyle}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent className="pt-0">
+              {/* Pie */}
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stats.volumeByCategory}
+                      dataKey="valorCompra"
+                      nameKey="categoria"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={52}
+                      outerRadius={88}
+                      paddingAngle={4}
+                      stroke="hsl(var(--card))"
+                      strokeWidth={2}
+                    >
+                      {stats.volumeByCategory.map((entry) => (
+                        <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: number) => [formatUSD(v), "Compra"]}
+                      contentStyle={tooltipStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Summary */}
+              <div className="mt-3 space-y-2">
+                {(() => {
+                  const total = stats.volumeByCategory.reduce((s, v) => s + v.valorCompra, 0);
+                  return stats.volumeByCategory.map((entry) => {
+                    const pct = total > 0 ? ((entry.valorCompra / total) * 100).toFixed(1) : "0.0";
+                    const color = CATEGORY_COLORS[entry.categoria] || "#64748b";
+                    return (
+                      <div key={entry.categoria} className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full shrink-0" style={{ background: color }} />
+                        <span className="text-xs font-semibold flex-1">{entry.categoria}</span>
+                        <span className="text-xs font-bold tabular-nums">{formatUSD(entry.valorCompra)}</span>
+                        <span
+                          className="text-[11px] font-semibold w-12 text-right tabular-nums rounded-full px-1.5 py-0.5"
+                          style={{ background: color + "22", color }}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+                <div className="flex items-center gap-2 border-t pt-2 mt-1">
+                  <div className="h-3 w-3 shrink-0" />
+                  <span className="text-xs text-muted-foreground flex-1 font-medium">Total</span>
+                  <span className="text-xs font-bold tabular-nums text-primary">
+                    {formatUSD(stats.volumeByCategory.reduce((s, v) => s + v.valorCompra, 0))}
+                  </span>
+                  <span className="w-12" />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Distribuição de Valor por Categoria (Venda R$)</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Distribuição de Valor — Venda (R$)</CardTitle>
             </CardHeader>
-            <CardContent className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.volumeByCategory}
-                    dataKey="valorVenda"
-                    nameKey="categoria"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    strokeWidth={0}
-                    label={(e: { categoria: string; valorVenda: number }) => `${e.categoria}: ${formatBRL(e.valorVenda)}`}
-                    labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
-                  >
-                    {stats.volumeByCategory.map((entry) => (
-                      <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(v: number) => formatBRL(v)}
-                    contentStyle={tooltipStyle}
-                    itemStyle={tooltipItemStyle}
-                    labelStyle={tooltipLabelStyle}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent className="pt-0">
+              {/* Pie */}
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stats.volumeByCategory}
+                      dataKey="valorVenda"
+                      nameKey="categoria"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={52}
+                      outerRadius={88}
+                      paddingAngle={4}
+                      stroke="hsl(var(--card))"
+                      strokeWidth={2}
+                    >
+                      {stats.volumeByCategory.map((entry) => (
+                        <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: number) => [formatBRL(v), "Venda"]}
+                      contentStyle={tooltipStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Summary */}
+              <div className="mt-3 space-y-2">
+                {(() => {
+                  const total = stats.volumeByCategory.reduce((s, v) => s + v.valorVenda, 0);
+                  return stats.volumeByCategory.map((entry) => {
+                    const pct = total > 0 ? ((entry.valorVenda / total) * 100).toFixed(1) : "0.0";
+                    const color = CATEGORY_COLORS[entry.categoria] || "#64748b";
+                    return (
+                      <div key={entry.categoria} className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full shrink-0" style={{ background: color }} />
+                        <span className="text-xs font-semibold flex-1">{entry.categoria}</span>
+                        <span className="text-xs font-bold tabular-nums">{formatBRL(entry.valorVenda)}</span>
+                        <span
+                          className="text-[11px] font-semibold w-12 text-right tabular-nums rounded-full px-1.5 py-0.5"
+                          style={{ background: color + "22", color }}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+                <div className="flex items-center gap-2 border-t pt-2 mt-1">
+                  <div className="h-3 w-3 shrink-0" />
+                  <span className="text-xs text-muted-foreground flex-1 font-medium">Total</span>
+                  <span className="text-xs font-bold tabular-nums text-emerald-600">
+                    {formatBRL(stats.volumeByCategory.reduce((s, v) => s + v.valorVenda, 0))}
+                  </span>
+                  <span className="w-12" />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
