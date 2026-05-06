@@ -541,6 +541,7 @@ export default function Precificacao() {
 
   const handleApplyCotacao = (c: CotacaoSalva) => {
     setCotacaoForm({
+      pasta: c.pasta || "",
       produto: c.produto,
       codigo: c.codigo,
       fornecedor: c.fornecedor,
