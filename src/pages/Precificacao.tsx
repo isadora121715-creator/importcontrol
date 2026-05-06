@@ -812,6 +812,21 @@ export default function Precificacao() {
             {/* Form fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="lg:col-span-2">
+                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
+                  <Folder className="h-3 w-3 text-amber-500" /> Pasta da Cotação
+                  <span className="text-[10px] opacity-60">(ex: Cotação 01 - CL90ST)</span>
+                </label>
+                <Input
+                  placeholder="Nome da pasta para agrupar esta cotação"
+                  list="pastas-cotacoes"
+                  value={cotacaoForm.pasta}
+                  onChange={(e) => setCotacaoForm((f) => ({ ...f, pasta: e.target.value }))}
+                />
+                <datalist id="pastas-cotacoes">
+                  {pastasExistentes.map((p) => <option key={p} value={p} />)}
+                </datalist>
+              </div>
+              <div className="lg:col-span-2">
                 <label className="text-xs text-muted-foreground mb-1 block">Descrição do Produto</label>
                 <Input
                   placeholder="Nome / descrição do produto"
