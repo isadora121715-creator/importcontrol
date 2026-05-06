@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -191,7 +192,7 @@ const Geral = () => {
       reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO",
       "Registros",
       "POs Únicas",
-      "Valor de Compra (R$)",
+      "Valor de Compra (USD)",
       "Valor de Venda (R$)",
     ];
     const csv = [
@@ -290,9 +291,10 @@ const Geral = () => {
       .slice(-12)
       .map(([key, v]) => ({ mes: monthLabel(key), Compras: Math.round(v.compras), Vendas: Math.round(v.vendas) }));
 
-    const shipmentSeries = Array.from(shipments.entries())
-      .filter(([k]) => k !== "Outro" || (shipments.get("Outro") ?? 0) > 0)
-      .map(([nome, valor]) => ({ nome, valor }));
+    // Always show Marítimo and Aéreo even when count is 0; hide Outro if empty
+    const shipmentSeries = (["Marítimo", "Aéreo", "Outro"] as const)
+      .map((nome) => ({ nome, valor: shipments.get(nome) ?? 0 }))
+      .filter(({ nome, valor }) => nome !== "Outro" || valor > 0);
 
     const totals = {
       itens: rows.length,
@@ -376,8 +378,8 @@ const Geral = () => {
           })}
         </div>
 
-        {/* Volume + Distribuição de Valor */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        {/* Volume + Distribuições de Valor */}
+        <div className="grid gap-6 lg:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Volume por Categoria (Registros & POs)</CardTitle>
@@ -407,7 +409,7 @@ const Geral = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Distribuição de Valor por Categoria (Compra)</CardTitle>
+              <CardTitle className="text-base">Distribuição de Valor por Categoria (Compra $)</CardTitle>
             </CardHeader>
             <CardContent className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -418,9 +420,43 @@ const Geral = () => {
                     nameKey="categoria"
                     cx="50%"
                     cy="50%"
-                    outerRadius={110}
+                    outerRadius={100}
                     strokeWidth={0}
-                    label={(e: { categoria: string; valorCompra: number }) => `${e.categoria}: ${formatBRL(e.valorCompra)}`}
+                    label={(e: { categoria: string; valorCompra: number }) => `${e.categoria}: ${formatUSD(e.valorCompra)}`}
+                    labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+                  >
+                    {stats.volumeByCategory.map((entry) => (
+                      <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number) => formatUSD(v)}
+                    contentStyle={tooltipStyle}
+                    itemStyle={tooltipItemStyle}
+                    labelStyle={tooltipLabelStyle}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Distribuição de Valor por Categoria (Venda R$)</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stats.volumeByCategory}
+                    dataKey="valorVenda"
+                    nameKey="categoria"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    strokeWidth={0}
+                    label={(e: { categoria: string; valorVenda: number }) => `${e.categoria}: ${formatBRL(e.valorVenda)}`}
+                    labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
                   >
                     {stats.volumeByCategory.map((entry) => (
                       <Cell key={entry.categoria} fill={CATEGORY_COLORS[entry.categoria] || "#64748b"} />
@@ -498,29 +534,49 @@ const Geral = () => {
             <CardHeader>
               <CardTitle className="text-base">Tipos de Embarque</CardTitle>
             </CardHeader>
-            <CardContent className="h-[340px]">
-              {stats.shipmentSeries.length === 0 ? (
+            <CardContent className="h-[340px] flex flex-col justify-center">
+              {stats.shipmentSeries.every((s) => s.valor === 0) ? (
                 <p className="text-sm text-muted-foreground">Sem dados de embarque.</p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={stats.shipmentSeries}
-                      dataKey="valor"
-                      nameKey="nome"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={110}
-                      label={(e: { nome: string; valor: number }) => `${e.nome}: ${e.valor}`}
-                    >
+                  <BarChart
+                    data={stats.shipmentSeries}
+                    layout="vertical"
+                    margin={{ top: 16, right: 48, left: 8, bottom: 16 }}
+                  >
+                    <CartesianGrid strokeDasharray="4 4" stroke="hsl(var(--border))" strokeOpacity={0.4} horizontal={false} />
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      axisLine={false}
+                      tickLine={false}
+                      allowDecimals={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="nome"
+                      tick={{ fontSize: 12, fill: "hsl(var(--foreground))", fontWeight: 600 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={82}
+                    />
+                    <Tooltip
+                      formatter={(v: number) => [v, "Pedidos"]}
+                      contentStyle={tooltipStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                    <Bar dataKey="valor" name="Pedidos" radius={[0, 6, 6, 0]} maxBarSize={48}>
                       {stats.shipmentSeries.map((entry, i) => (
                         <Cell key={entry.nome} fill={SHIPMENT_COLORS[i % SHIPMENT_COLORS.length]} />
                       ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} />
-                    <Legend wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }} />
-                  </PieChart>
+                      <LabelList
+                        dataKey="valor"
+                        position="right"
+                        style={{ fontSize: 13, fontWeight: 700, fill: "hsl(var(--foreground))" }}
+                      />
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
@@ -573,8 +629,8 @@ const Geral = () => {
                       </th>
                       <th className="text-right px-3 py-2 font-semibold">Registros</th>
                       <th className="text-right px-3 py-2 font-semibold">POs Únicas</th>
-                      <th className="text-right px-3 py-2 font-semibold">Valor Compra</th>
-                      <th className="text-right px-3 py-2 font-semibold">Valor Venda</th>
+                      <th className="text-right px-3 py-2 font-semibold">Valor Compra (USD)</th>
+                      <th className="text-right px-3 py-2 font-semibold">Valor Venda (R$)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -583,7 +639,7 @@ const Geral = () => {
                         <td className="px-3 py-2 whitespace-nowrap font-medium">{r.chave}</td>
                         <td className="px-3 py-2 text-right">{r.registros}</td>
                         <td className="px-3 py-2 text-right">{r.pos}</td>
-                        <td className="px-3 py-2 text-right">{formatBRL(r.valorCompra)}</td>
+                        <td className="px-3 py-2 text-right">{formatUSD(r.valorCompra)}</td>
                         <td className="px-3 py-2 text-right">{formatBRL(r.valorVenda)}</td>
                       </tr>
                     ))}
