@@ -508,6 +508,7 @@ export default function Precificacao() {
     const nova: CotacaoSalva = {
       id: Date.now().toString(),
       criadoEm: new Date().toISOString(),
+      pasta: cotacaoForm.pasta.trim() || "Sem pasta",
       produto: cotacaoForm.produto || cotacaoForm.codigo,
       codigo: cotacaoForm.codigo,
       fornecedor: cotacaoForm.fornecedor,
