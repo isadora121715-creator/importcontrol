@@ -240,13 +240,17 @@ export function usePedidos(categoria: string = "Conexões") {
 
       // Sync catalog for categories that carry product data, then refresh the catalog view
       if (categoria !== "Embarques") {
-        void syncCatalogo(rows, categoria).then(({ added, updated }) => {
+        try {
+          const { added, updated } = await syncCatalogo(rows, categoria);
           if (added > 0 || updated > 0) {
             toast.info(`Catálogo: +${added} novo(s), ${updated} atualizado(s).`);
           }
-          // Recarrega o catálogo para todos que estiverem na aba
-          void queryClient.invalidateQueries({ queryKey: ["catalogo"] });
-        });
+          // Force immediate refetch so the Catalogo tab shows new items right away
+          await queryClient.refetchQueries({ queryKey: ["catalogo"] });
+        } catch (syncErr) {
+          console.error("syncCatalogo error:", syncErr);
+          toast.warning("Planilha salva, mas houve um erro ao sincronizar o catálogo. Tente recarregar o catálogo manualmente.");
+        }
       }
       setUpdateProgress(100);
       setUpdateMessage("Atualização concluída.");

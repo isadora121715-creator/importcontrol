@@ -62,7 +62,10 @@ export async function upsertCatalogoItems(items: CatalogoItem[]): Promise<void> 
   const { error } = await (supabase as any)
     .from("catalogo_materiais")
     .upsert(items.map(itemToRow), { onConflict: "id" });
-  if (error) console.error("upsertCatalogoItems error:", error);
+  if (error) {
+    console.error("upsertCatalogoItems error:", error);
+    throw error; // propagate so the caller can show a proper warning
+  }
 }
 
 // ── exclusão ──────────────────────────────────────────────────────────────────

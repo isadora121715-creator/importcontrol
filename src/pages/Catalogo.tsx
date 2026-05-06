@@ -146,8 +146,9 @@ export default function Catalogo() {
   const { data: rawCatalog, isLoading, refetch } = useQuery({
     queryKey: ["catalogo"],
     queryFn:  readCatalogo,
-    staleTime: 30_000,
+    staleTime: 0,              // always consider stale — re-fetch on every mount
     gcTime:    10 * 60_000,
+    refetchOnMount: "always",  // fetch fresh every time the page is opened
     refetchOnWindowFocus: false,
   });
   // Supabase tem prioridade; se retornar vazio usa os dados embutidos no app
