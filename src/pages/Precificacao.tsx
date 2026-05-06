@@ -33,6 +33,7 @@ interface CatalogoItem {
 interface CotacaoSalva {
   id: string;
   criadoEm: string;
+  pasta: string;
   produto: string;
   codigo: string;
   fornecedor: string;
