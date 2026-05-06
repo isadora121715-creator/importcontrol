@@ -424,11 +424,132 @@ const Embarques = () => {
 
   const downloadIntlFrete = () => {
     if (intlRows.length === 0) return;
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    const fmtDate = (v: unknown): string => {
+      if (typeof v === "number" && v > 30000) {
+        const d = new Date(Math.floor(v - 25569) * 86400000);
+        return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+      }
+      if (typeof v === "string") {
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return v;
+        const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+      }
+      return v != null ? String(v) : "";
+    };
+
+    const fmtUSD = (v: number) =>
+      `$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const fmtBRL = (v: number) =>
+      `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const fmtEUR = (v: number) =>
+      `€ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    // ── Column configuration ───────────────────────────────────────────────
+    const SKIP = new Set(["__qty20", "__qty40", "__qty45"]);
+
+    // Export columns: keep original order, skip internal keys
+    const exportCols = intlColumns.filter((c) => !SKIP.has(c));
+
+    // For each column: get sub-header text (used for ColX renaming and BRL detection)
+    const getSubHeader = (col: string) => {
+      const idx = intlColumns.indexOf(col);
+      return (intlSubHeaders[idx] ?? "").replace(/\r\n/g, " ").trim();
+    };
+
+    // Row 1: main header — replace "ColX" entries with their sub-header label
+    const headerRow: string[] = exportCols.map((col) => {
+      if (/^Col\d+$/.test(col)) {
+        const sub = getSubHeader(col);
+        return sub || col;
+      }
+      return col;
+    });
+
+    // Row 2: supplementary sub-header (only for non-ColX cols that have meaningful sub-labels)
+    const subRow: string[] = exportCols.map((col) => {
+      if (/^Col\d+$/.test(col)) return ""; // already in row 1
+      const sub = getSubHeader(col);
+      return sub && sub !== col ? sub : "";
+    });
+    const hasSubRow = subRow.some((s) => s !== "");
+
+    // Column type detection
+    const isDateCol = (col: string) =>
+      /data|date|eta|etd|embarque|prazo|vencimento/i.test(
+        col.normalize("NFD").replace(/[̀-ͯ]/g, ""),
+      );
+
+    const isBRLCol = (col: string) =>
+      getSubHeader(col).toLowerCase().includes("brl");
+
+    const isUSDCol = (col: string) => {
+      const n = col.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const sub = getSubHeader(col).toLowerCase();
+      return (
+        /tarifa|frete|custo total|diferenca|diferença/.test(n) ||
+        sub.includes("usd") ||
+        col === "TAXAS - ORIGEM" ||
+        col === "TAXAS - DESTINO"
+      );
+    };
+
+    const isPctCol = (col: string) =>
+      col.includes("%") || /aumento|percentual/i.test(col);
+
+    // ── Data rows ──────────────────────────────────────────────────────────
+    const dataRows: unknown[][] = intlRows.map((row) =>
+      exportCols.map((col) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const v = (row as any)[col];
+        if (v === undefined || v === null || v === "") return "";
+
+        if (isDateCol(col)) return fmtDate(v);
+
+        if (typeof v === "number") {
+          if (isPctCol(col)) return `${Number(v).toFixed(1)}%`;
+          if (isBRLCol(col))  return fmtBRL(v);
+          if (isUSDCol(col))  return fmtUSD(v);
+          // VALOR P.O: currency from MOEDA P.O field of the same row
+          if (col === "VALOR P.O") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const moeda = String((row as any)["MOEDA P.O"] ?? "USD").toUpperCase().trim();
+            if (moeda === "EUR") return fmtEUR(v);
+            return fmtUSD(v);
+          }
+        }
+
+        return v;
+      }),
+    );
+
+    // ── Build sheet ────────────────────────────────────────────────────────
+    const aoa: unknown[][] = [headerRow];
+    if (hasSubRow) aoa.push(subRow);
+    aoa.push(...dataRows);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Column widths
+    ws["!cols"] = exportCols.map((col) => {
+      const n = col.toLowerCase();
+      if (/agente|exportador|obs/.test(n))          return { wch: 22 };
+      if (/material|origem|destino/.test(n))        return { wch: 18 };
+      if (/modalidade|container|tipo/.test(n))      return { wch: 14 };
+      if (/data|date|revisao|incial|final/.test(n)) return { wch: 13 };
+      if (/tarifa|frete|custo|taxa|valor/.test(n))  return { wch: 16 };
+      if (/p\.o\.|\.o\.|^po$/.test(n))             return { wch: 13 };
+      if (/diferenca|diferença/.test(n))            return { wch: 14 };
+      if (/atualizacao/.test(n))                    return { wch: 15 };
+      return { wch: 11 };
+    });
+
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(intlRows);
     XLSX.utils.book_append_sheet(wb, ws, "Fretes Internacionais");
-    const today = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Fretes_Internacionais_${today}.xlsx`);
+    XLSX.writeFile(wb, `Fretes_Internacionais_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   // ---- Filtros e estatísticas para Internacionais ----
