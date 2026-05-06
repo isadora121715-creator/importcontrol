@@ -258,6 +258,7 @@ function useCurrentUser() {
 // ─────────────────────────────────────────────
 
 interface CotacaoFormState {
+  pasta: string;
   produto: string;
   codigo: string;
   fornecedor: string;
@@ -271,10 +272,69 @@ interface CotacaoFormState {
 }
 
 const COTACAO_EMPTY: CotacaoFormState = {
-  produto: "", codigo: "", fornecedor: "",
+  pasta: "", produto: "", codigo: "", fornecedor: "",
   precoCompraUSD: "", precoVendaBRL: "",
   qtd: "1", freteUSD: "", impostoPct: "", cambio: "5.20", observacao: "",
 };
+
+// Export helpers
+function exportCotacoesXLSX(items: CotacaoSalva[], filename: string) {
+  const rows = items.map((c) => ({
+    Pasta: c.pasta || "(sem pasta)",
+    Data: new Date(c.criadoEm).toLocaleString("pt-BR"),
+    Codigo: c.codigo,
+    Produto: c.produto,
+    Fornecedor: c.fornecedor,
+    Qtd: c.qtd,
+    "Preco Compra (USD)": c.precoCompraUSD ?? "",
+    "Frete (USD)": c.freteUSD,
+    "Impostos (%)": c.impostoPct,
+    "Cambio": c.cambio,
+    "Custo Unit (R$)": Number(c.custoUnitBRL.toFixed(2)),
+    "Venda Minima (R$)": Number(c.vendaMinBRL.toFixed(2)),
+    "Preco Venda (R$)": c.precoVendaBRL ?? "",
+    "Margem Real (%)": c.margemReal != null ? Number(c.margemReal.toFixed(2)) : "",
+    "Margem Alvo (%)": c.margem,
+    Observacao: c.observacao,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cotacoes");
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+function exportCotacoesPDF(items: CotacaoSalva[], filename: string, titulo: string) {
+  const doc = new jsPDF({ orientation: "landscape" });
+  doc.setFontSize(14);
+  doc.text(titulo, 14, 15);
+  doc.setFontSize(9);
+  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")} · ${items.length} cotação(ões)`, 14, 21);
+
+  autoTable(doc, {
+    startY: 26,
+    head: [["Data", "Código", "Produto", "Fornecedor", "Qtd", "Compra USD", "Custo R$", "Venda Mín R$", "Venda R$", "Margem"]],
+    body: items.map((c) => [
+      new Date(c.criadoEm).toLocaleDateString("pt-BR"),
+      c.codigo || "-",
+      (c.produto || "").slice(0, 40),
+      (c.fornecedor || "").slice(0, 20),
+      String(c.qtd),
+      c.precoCompraUSD != null ? `$${c.precoCompraUSD.toFixed(2)}` : "-",
+      c.custoUnitBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      c.vendaMinBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      c.precoVendaBRL != null ? c.precoVendaBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "-",
+      c.margemReal != null ? `${c.margemReal.toFixed(1)}%` : "-",
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [124, 58, 237] },
+  });
+
+  doc.save(`${filename}.pdf`);
+}
+
+function sanitizeFilename(s: string) {
+  return (s || "cotacoes").replace(/[^\w\-]+/g, "_").slice(0, 60);
+}
 
 // ─────────────────────────────────────────────
 // Main page
