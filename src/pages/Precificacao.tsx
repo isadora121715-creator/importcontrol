@@ -163,7 +163,7 @@ function useProductSearch(query: string) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
             .from("pedidos")
-            .select("id, codigo, descricao, preco_compra, fornecedor, categoria")
+            .select("id, codigo, descricao, preco_compra, preco_venda, fornecedor, categoria")
             .or(filter)
             .order("created_at", { ascending: false })
             .limit(30),
@@ -195,9 +195,11 @@ function useProductSearch(query: string) {
           const fornecedor = ((r.fornecedor as string) ?? "").trim();
           const categoria = ((r.categoria as string) ?? "").trim();
           const preco = r.preco_compra != null ? Number(r.preco_compra) : null;
+          const precoVenda = r.preco_venda != null ? Number(r.preco_venda) : null;
           const existing = merged.get(key);
           if (existing) {
             if (existing.preco_compra == null && preco != null) existing.preco_compra = preco;
+            if (existing.preco_venda == null && precoVenda != null) existing.preco_venda = precoVenda;
             if (fornecedor && !existing.fornecedores.includes(fornecedor)) existing.fornecedores.push(fornecedor);
             if (categoria && !existing.categorias.includes(categoria)) existing.categorias.push(categoria);
           } else {
@@ -206,7 +208,7 @@ function useProductSearch(query: string) {
               codigo,
               descricao,
               preco_compra: preco,
-              preco_venda: null,
+              preco_venda: precoVenda,
               fornecedores: fornecedor ? [fornecedor] : [],
               categorias: categoria ? [categoria] : [],
             });
@@ -232,6 +234,7 @@ function useProductSearch(query: string) {
 function useCurrentUser() {
   const [userId, setUserId] = useState<string>("anonymous");
   const [displayName, setDisplayName] = useState<string>("Usuário");
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -239,6 +242,7 @@ function useCurrentUser() {
         setUserId(data.session.user.id);
         setDisplayName(data.session.user.email?.split("@")[0] ?? "Usuário");
       }
+      setAuthReady(true); // auth check complete — real userId is now known
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
@@ -252,7 +256,7 @@ function useCurrentUser() {
     return () => subscription.unsubscribe();
   }, []);
 
-  return { userId, displayName };
+  return { userId, displayName, authReady };
 }
 
 // ─────────────────────────────────────────────
@@ -343,7 +347,7 @@ function sanitizeFilename(s: string) {
 // ─────────────────────────────────────────────
 
 export default function Precificacao() {
-  const { userId, displayName } = useCurrentUser();
+  const { userId, displayName, authReady } = useCurrentUser();
   const [margem, setMargem] = useState("18");
   const margemNum = Number(margem) || 18;
 
@@ -378,6 +382,7 @@ export default function Precificacao() {
       fornecedor: item.fornecedores[0] ?? f.fornecedor,
       unidade: f.unidade || "UN",
       precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
+      precoVendaBRL:  item.preco_venda  != null ? String(item.preco_venda)  : f.precoVendaBRL,
     }));
     setVendaSearch(desc);
     setVendaShowDropdown(false);
@@ -493,10 +498,31 @@ export default function Precificacao() {
   const [pastasAbertas, setPastasAbertas] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (userId !== "anonymous") {
-      setCotacoes(readCotacoes(userId));
+    if (!authReady) return; // wait for Supabase auth to resolve before touching localStorage
+
+    const anonKey = cotacoesKey("anonymous");
+    const anonRaw = localStorage.getItem(anonKey);
+
+    if (userId !== "anonymous" && anonRaw) {
+      // Migrate any cotações saved before auth resolved (under "anonymous" key)
+      try {
+        const anonItems = JSON.parse(anonRaw) as CotacaoSalva[];
+        if (anonItems.length > 0) {
+          const existing = readCotacoes(userId);
+          // anonymous items go first (they were created chronologically first)
+          const merged = [...anonItems, ...existing];
+          saveCotacoes(userId, merged);
+          localStorage.removeItem(anonKey);
+          setCotacoes(merged);
+          toast.success(`${anonItems.length} cotação(ões) recuperada(s) para sua conta.`);
+          return;
+        }
+      } catch { /* corrupt data — just remove it */ }
+      localStorage.removeItem(anonKey);
     }
-  }, [userId]);
+
+    setCotacoes(readCotacoes(userId));
+  }, [userId, authReady]);
 
   const cotacoesPorPasta = useMemo(() => {
     const map = new Map<string, CotacaoSalva[]>();
@@ -1034,7 +1060,7 @@ export default function Precificacao() {
                 <Button
                   onClick={handleSaveCotacao}
                   className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
-                  disabled={!cotacaoForm.produto && !cotacaoForm.codigo}
+                  disabled={(!cotacaoForm.produto && !cotacaoForm.codigo) || !authReady}
                 >
                   <BookmarkPlus className="h-4 w-4" />
                   Salvar Cotação
