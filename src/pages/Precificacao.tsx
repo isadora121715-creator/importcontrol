@@ -1020,6 +1020,58 @@ export default function Precificacao() {
                   <BookmarkPlus className="h-4 w-4" />
                   Salvar Cotação
                 </Button>
+                <div className="flex gap-1">
+                  <Button
+                    variant="outline" size="sm" className="flex-1 h-7 text-[11px] gap-1"
+                    disabled={!cotacaoCalc}
+                    onClick={() => {
+                      const calc = cotacaoCalc!;
+                      const item: CotacaoSalva = {
+                        id: "preview", criadoEm: new Date().toISOString(),
+                        pasta: cotacaoForm.pasta || "Cotação atual",
+                        produto: cotacaoForm.produto, codigo: cotacaoForm.codigo,
+                        fornecedor: cotacaoForm.fornecedor,
+                        precoCompraUSD: Number(cotacaoForm.precoCompraUSD) || null,
+                        precoVendaBRL: Number(cotacaoForm.precoVendaBRL) || null,
+                        qtd: Number(cotacaoForm.qtd) || 1,
+                        freteUSD: Number(cotacaoForm.freteUSD) || 0,
+                        impostoPct: Number(cotacaoForm.impostoPct) || 0,
+                        cambio: Number(cotacaoForm.cambio) || 5.20,
+                        custoUnitBRL: calc.custoUnitBRL, vendaMinBRL: calc.vendaMinBRL,
+                        margemReal: calc.margemReal, margem: margemNum,
+                        observacao: cotacaoForm.observacao,
+                      };
+                      exportCotacoesXLSX([item], sanitizeFilename(cotacaoForm.pasta || cotacaoForm.codigo || cotacaoForm.produto || "cotacao"));
+                    }}
+                  >
+                    <FileSpreadsheet className="h-3 w-3 text-emerald-600" /> XLSX
+                  </Button>
+                  <Button
+                    variant="outline" size="sm" className="flex-1 h-7 text-[11px] gap-1"
+                    disabled={!cotacaoCalc}
+                    onClick={() => {
+                      const calc = cotacaoCalc!;
+                      const item: CotacaoSalva = {
+                        id: "preview", criadoEm: new Date().toISOString(),
+                        pasta: cotacaoForm.pasta || "Cotação atual",
+                        produto: cotacaoForm.produto, codigo: cotacaoForm.codigo,
+                        fornecedor: cotacaoForm.fornecedor,
+                        precoCompraUSD: Number(cotacaoForm.precoCompraUSD) || null,
+                        precoVendaBRL: Number(cotacaoForm.precoVendaBRL) || null,
+                        qtd: Number(cotacaoForm.qtd) || 1,
+                        freteUSD: Number(cotacaoForm.freteUSD) || 0,
+                        impostoPct: Number(cotacaoForm.impostoPct) || 0,
+                        cambio: Number(cotacaoForm.cambio) || 5.20,
+                        custoUnitBRL: calc.custoUnitBRL, vendaMinBRL: calc.vendaMinBRL,
+                        margemReal: calc.margemReal, margem: margemNum,
+                        observacao: cotacaoForm.observacao,
+                      };
+                      exportCotacoesPDF([item], sanitizeFilename(cotacaoForm.pasta || cotacaoForm.codigo || cotacaoForm.produto || "cotacao"), `Cotação: ${cotacaoForm.produto || cotacaoForm.codigo || "(sem nome)"}`);
+                    }}
+                  >
+                    <FileDown className="h-3 w-3 text-red-600" /> PDF
+                  </Button>
+                </div>
                 <p className="text-[10px] text-muted-foreground text-center">
                   Salvo como: <span className="font-semibold">{displayName}</span>
                 </p>
