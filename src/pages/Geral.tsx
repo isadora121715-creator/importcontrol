@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart2, Package, Users, ShoppingCart, DollarSign, FileText, Download } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { BarChart2, Package, Users, ShoppingCart, DollarSign, FileText, Download, FileSpreadsheet, FileDown } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -53,6 +56,18 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const SHIPMENT_COLORS = ["#3b82f6", "#f97316", "#64748b"];
+
+const formatBRL = (v: number) =>
+  `R$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+
+const formatUSD = (v: number) =>
+  `$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+
+const formatBRL2 = (v: number) =>
+  `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatUSD2 = (v: number) =>
+  `$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Recharts tooltip style that respects the current CSS theme (light + dark)
 const tooltipStyle = {
@@ -307,6 +322,244 @@ const Geral = () => {
     return { volumeByCategory, performanceByCategory, monthlySeries, shipmentSeries, totals };
   }, [data]);
 
+  // ── Export: Excel ─────────────────────────────────────────────────────────────
+  const downloadGeralXLSX = () => {
+    const wb = XLSX.utils.book_new();
+    const today = new Date().toLocaleDateString("pt-BR");
+
+    // Helper to add a sheet
+    const addSheet = (name: string, rows: unknown[][]) => {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    };
+
+    // ── Sheet 1: KPIs ──────────────────────────────────────────────────────────
+    addSheet("KPIs", [
+      ["VISÃO GERAL CONSOLIDADA", "", today],
+      [],
+      ["Indicador", "Valor"],
+      ["Total de POs", stats.totals.pos],
+      ["Total de Itens", stats.totals.itens],
+      ["Total de Fornecedores", stats.totals.fornecedores],
+      ["Valor Total de Compra (USD)", stats.totals.valorCompra],
+      ["Valor Total de Venda (R$)", stats.totals.valorVenda],
+    ]);
+
+    // ── Sheet 2: Por Categoria ────────────────────────────────────────────────
+    addSheet("Por Categoria", [
+      ["Categoria", "Registros", "POs Únicas", "Fornecedores", "Valor Compra (USD)", "Valor Venda (R$)"],
+      ...stats.volumeByCategory.map((v) => [
+        v.categoria,
+        v.registros,
+        v.pos,
+        v.fornecedores,
+        v.valorCompra,
+        v.valorVenda,
+      ]),
+    ]);
+
+    // ── Sheet 3: Desempenho ────────────────────────────────────────────────────
+    addSheet("Desempenho", [
+      ["Categoria", "No Prazo (%)", "Em Andamento (%)", "Atrasado (%)"],
+      ...stats.performanceByCategory.map((v) => [
+        v.categoria,
+        v["No Prazo"],
+        v["Em Andamento"],
+        v["Atrasado"],
+      ]),
+    ]);
+
+    // ── Sheet 4: Tipos de Embarque ────────────────────────────────────────────
+    addSheet("Embarques", [
+      ["Tipo", "Quantidade"],
+      ...stats.shipmentSeries.map((v) => [v.nome, v.valor]),
+    ]);
+
+    // ── Sheet 5: Série Mensal ─────────────────────────────────────────────────
+    addSheet("Série Mensal", [
+      ["Mês", "Compras (R$)", "Vendas (R$)"],
+      ...stats.monthlySeries.map((v) => [v.mes, v.Compras, v.Vendas]),
+    ]);
+
+    // ── Sheet 6: Relatório Dimensão ───────────────────────────────────────────
+    const dimLabel = reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO";
+    addSheet("Relatório Dimensão", [
+      [dimLabel, "Registros", "POs Únicas", "Valor Compra (USD)", "Valor Venda (R$)"],
+      ...report.map((r) => [r.chave, r.registros, r.pos, r.valorCompra, r.valorVenda]),
+    ]);
+
+    XLSX.writeFile(wb, `relatorio-geral-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // ── Export: PDF ────────────────────────────────────────────────────────────
+  const downloadGeralPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const today = new Date().toLocaleDateString("pt-BR");
+    const pageW = doc.internal.pageSize.getWidth();
+
+    // Header bar
+    doc.setFillColor(30, 64, 175);
+    doc.rect(0, 0, pageW, 18, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("IMPORTCONTROL — Visão Geral Consolidada", 10, 12);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+
+    let curY = 26;
+    doc.setTextColor(30, 64, 175);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+
+    // ── KPIs ──────────────────────────────────────────────────────────────────
+    doc.text("Indicadores Gerais", 10, curY);
+    curY += 2;
+    autoTable(doc, {
+      startY: curY,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Total de POs", stats.totals.pos.toLocaleString("pt-BR")],
+        ["Total de Itens", stats.totals.itens.toLocaleString("pt-BR")],
+        ["Total de Fornecedores", stats.totals.fornecedores.toLocaleString("pt-BR")],
+        ["Valor Total de Compra", formatUSD2(stats.totals.valorCompra)],
+        ["Valor Total de Venda", formatBRL2(stats.totals.valorVenda)],
+      ],
+      headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [239, 246, 255] },
+      columnStyles: { 1: { halign: "right" } },
+      margin: { left: 10, right: 10 },
+    });
+
+    // ── Por Categoria ─────────────────────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    curY = (doc as any).lastAutoTable.finalY + 8;
+    doc.setTextColor(30, 64, 175);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("Volume por Categoria", 10, curY);
+    curY += 2;
+    autoTable(doc, {
+      startY: curY,
+      head: [["Categoria", "Registros", "POs Únicas", "Fornecedores", "Valor Compra (USD)", "Valor Venda (R$)"]],
+      body: stats.volumeByCategory.map((v) => [
+        v.categoria,
+        v.registros.toLocaleString("pt-BR"),
+        v.pos.toLocaleString("pt-BR"),
+        v.fornecedores.toLocaleString("pt-BR"),
+        formatUSD2(v.valorCompra),
+        formatBRL2(v.valorVenda),
+      ]),
+      headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [239, 246, 255] },
+      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" } },
+      margin: { left: 10, right: 10 },
+    });
+
+    // ── Desempenho ────────────────────────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    curY = (doc as any).lastAutoTable.finalY + 8;
+    doc.setTextColor(30, 64, 175);
+    doc.text("Desempenho de Prazos por Categoria", 10, curY);
+    curY += 2;
+    autoTable(doc, {
+      startY: curY,
+      head: [["Categoria", "No Prazo (%)", "Em Andamento (%)", "Atrasado (%)"]],
+      body: stats.performanceByCategory.map((v) => [
+        v.categoria,
+        `${v["No Prazo"]}%`,
+        `${v["Em Andamento"]}%`,
+        `${v["Atrasado"]}%`,
+      ]),
+      headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [239, 246, 255] },
+      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+      margin: { left: 10, right: 10 },
+    });
+
+    // ── Tipos de Embarque ─────────────────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    curY = (doc as any).lastAutoTable.finalY + 8;
+    doc.setTextColor(30, 64, 175);
+    doc.text("Tipos de Embarque", 10, curY);
+    curY += 2;
+    autoTable(doc, {
+      startY: curY,
+      head: [["Tipo", "Quantidade"]],
+      body: stats.shipmentSeries.map((v) => [v.nome, v.valor.toLocaleString("pt-BR")]),
+      headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [239, 246, 255] },
+      columnStyles: { 1: { halign: "right" } },
+      margin: { left: 10, right: 10 },
+    });
+
+    // ── Nova página: Série Mensal ──────────────────────────────────────────────
+    if (stats.monthlySeries.length > 0) {
+      doc.addPage();
+      // Header bar on new page
+      doc.setFillColor(30, 64, 175);
+      doc.rect(0, 0, pageW, 18, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Vendas vs Compras — Série Mensal", 10, 12);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+
+      autoTable(doc, {
+        startY: 24,
+        head: [["Mês", "Compras (R$)", "Vendas (R$)"]],
+        body: stats.monthlySeries.map((v) => [v.mes, formatBRL2(v.Compras), formatBRL2(v.Vendas)]),
+        headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [239, 246, 255] },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+        margin: { left: 10, right: 10 },
+      });
+    }
+
+    // ── Nova página: Relatório Dimensão ───────────────────────────────────────
+    if (report.length > 0) {
+      doc.addPage();
+      doc.setFillColor(30, 64, 175);
+      doc.rect(0, 0, pageW, 18, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      const dimLabel = reportDim === "mes" ? "Por Mês" : reportDim === "fornecedor" ? "Por Fornecedor" : reportDim === "cliente" ? "Por Cliente" : "Por PO";
+      doc.text(`Relatório por Dimensão — ${dimLabel}`, 10, 12);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+
+      const dimColLabel = reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO";
+      autoTable(doc, {
+        startY: 24,
+        head: [[dimColLabel, "Registros", "POs Únicas", "Valor Compra (USD)", "Valor Venda (R$)"]],
+        body: report.map((r) => [
+          r.chave,
+          r.registros.toLocaleString("pt-BR"),
+          r.pos.toLocaleString("pt-BR"),
+          formatUSD2(r.valorCompra),
+          formatBRL2(r.valorVenda),
+        ]),
+        headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [239, 246, 255] },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } },
+        margin: { left: 10, right: 10 },
+      });
+    }
+
+    doc.save(`relatorio-geral-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -329,12 +582,6 @@ const Geral = () => {
     );
   }
 
-  const formatBRL = (v: number) =>
-    `R$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
-
-  const formatUSD = (v: number) =>
-    `$ ${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
-
   const kpis = [
     { label: "Total de POs", value: stats.totals.pos.toLocaleString("pt-BR"), icon: FileText, color: "text-primary", bg: "bg-primary/10" },
     { label: "Valor Total de Compra", value: formatUSD(stats.totals.valorCompra), icon: ShoppingCart, color: "text-blue-600", bg: "bg-blue-500/10" },
@@ -347,14 +594,26 @@ const Geral = () => {
     <div className="min-h-screen bg-background">
       <HeaderTabs />
       <main className="mx-auto max-w-[1600px] p-6 space-y-6">
-        <div>
-          <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
-            <BarChart2 className="h-5 w-5 text-primary" />
-            Visão Geral Consolidada
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Comparativo entre Conexões, Tubos e Válvulas
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+              <BarChart2 className="h-5 w-5 text-primary" />
+              Visão Geral Consolidada
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Comparativo entre Conexões, Tubos e Válvulas
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={downloadGeralXLSX} disabled={!data || data.length === 0}>
+              <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+              Exportar Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadGeralPDF} disabled={!data || data.length === 0}>
+              <FileDown className="h-4 w-4 mr-1.5" />
+              Exportar PDF
+            </Button>
+          </div>
         </div>
 
         {/* KPIs */}
