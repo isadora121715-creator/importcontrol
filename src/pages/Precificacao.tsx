@@ -1063,104 +1063,169 @@ export default function Precificacao() {
                   Nenhuma cotação salva ainda. Faça sua primeira cotação acima.
                 </p>
               ) : (
-                <div className="space-y-2">
-                  {cotacoes.map((c) => (
-                    <div key={c.id} className="flex items-start gap-3 rounded-lg border border-border/40 p-3 hover:bg-muted/20 transition-colors">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 mt-0.5">
-                        <Star className="h-3.5 w-3.5 text-amber-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 flex-wrap">
-                          <div>
-                            <p className="text-sm font-semibold truncate">{c.produto || c.codigo || "—"}</p>
-                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                              {c.codigo && (
-                                <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 rounded">{c.codigo}</span>
-                              )}
-                              {c.fornecedor && (
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                  <Building2 className="h-2.5 w-2.5" />{c.fornecedor}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                <Clock className="h-2.5 w-2.5" />
-                                {new Date(c.criadoEm).toLocaleDateString("pt-BR")} {new Date(c.criadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
+                <>
+                  <div className="flex items-center justify-end gap-2 mb-3 flex-wrap">
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => exportCotacoesXLSX(cotacoes, `cotacoes_${sanitizeFilename(displayName)}_${new Date().toISOString().slice(0,10)}`)}
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Exportar tudo (XLSX)
+                    </Button>
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => exportCotacoesPDF(cotacoes, `cotacoes_${sanitizeFilename(displayName)}_${new Date().toISOString().slice(0,10)}`, `Todas as Cotações — ${displayName}`)}
+                    >
+                      <FileDown className="h-3.5 w-3.5 text-red-600" /> Exportar tudo (PDF)
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {cotacoesPorPasta.map(([pasta, lista]) => {
+                      const aberta = pastasAbertas[pasta] ?? true;
+                      return (
+                        <div key={pasta} className="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                          <div className="flex items-center justify-between gap-2 px-3 py-2 bg-amber-500/10 flex-wrap">
+                            <button
+                              className="flex items-center gap-2 text-left flex-1 min-w-0"
+                              onClick={() => togglePasta(pasta)}
+                            >
+                              {aberta ? <FolderOpen className="h-4 w-4 text-amber-600 shrink-0" /> : <Folder className="h-4 w-4 text-amber-600 shrink-0" />}
+                              <span className="text-sm font-semibold truncate">{pasta}</span>
+                              <Badge variant="outline" className="text-[10px] border-amber-500/40">{lista.length}</Badge>
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                onClick={() => exportCotacoesXLSX(lista, sanitizeFilename(pasta))}
+                                title="Baixar pasta em Excel"
+                              >
+                                <FileSpreadsheet className="h-3 w-3 text-emerald-600" /> XLSX
+                              </Button>
+                              <Button
+                                size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                onClick={() => exportCotacoesPDF(lista, sanitizeFilename(pasta), `Pasta: ${pasta}`)}
+                                title="Baixar pasta em PDF"
+                              >
+                                <FileDown className="h-3 w-3 text-red-600" /> PDF
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                            {c.precoCompraUSD != null && (
-                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                                Compra: $ {c.precoCompraUSD.toFixed(2)}
-                              </span>
-                            )}
-                            {c.precoVendaBRL != null && (
-                              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                Venda: {c.precoVendaBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                              </span>
-                            )}
-                            {c.margemReal != null && (
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px]",
-                                  c.margemReal >= c.margem
-                                    ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                                    : "border-red-500/40 text-red-600 dark:text-red-400",
-                                )}
-                              >
-                                {c.margemReal.toFixed(1)}%
-                              </Badge>
-                            )}
-                          </div>
+
+                          {aberta && (
+                            <div className="p-2 space-y-2">
+                              {lista.map((c) => (
+                                <div key={c.id} className="flex items-start gap-3 rounded-lg border border-border/40 p-3 bg-card hover:bg-muted/20 transition-colors">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 mt-0.5">
+                                    <Star className="h-3.5 w-3.5 text-amber-500" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                                      <div>
+                                        <p className="text-sm font-semibold truncate">{c.produto || c.codigo || "—"}</p>
+                                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                          {c.codigo && (
+                                            <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 rounded">{c.codigo}</span>
+                                          )}
+                                          {c.fornecedor && (
+                                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                              <Building2 className="h-2.5 w-2.5" />{c.fornecedor}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                            <Clock className="h-2.5 w-2.5" />
+                                            {new Date(c.criadoEm).toLocaleDateString("pt-BR")} {new Date(c.criadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                        {c.precoCompraUSD != null && (
+                                          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                                            Compra: $ {c.precoCompraUSD.toFixed(2)}
+                                          </span>
+                                        )}
+                                        {c.precoVendaBRL != null && (
+                                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                            Venda: {c.precoVendaBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                          </span>
+                                        )}
+                                        {c.margemReal != null && (
+                                          <Badge
+                                            variant="outline"
+                                            className={cn(
+                                              "text-[10px]",
+                                              c.margemReal >= c.margem
+                                                ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                                : "border-red-500/40 text-red-600 dark:text-red-400",
+                                            )}
+                                          >
+                                            {c.margemReal.toFixed(1)}%
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {c.observacao && (
+                                      <p className="text-[11px] text-muted-foreground mt-1 italic">{c.observacao}</p>
+                                    )}
+                                    <div className="flex gap-2 mt-2 flex-wrap">
+                                      <Button
+                                        size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                                        onClick={() => handleApplyCotacao(c)}
+                                      >
+                                        Carregar
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                        onClick={() => exportCotacoesXLSX([c], sanitizeFilename(`${c.codigo || c.produto}_${c.id}`))}
+                                      >
+                                        <Download className="h-3 w-3" /> XLSX
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                        onClick={() => exportCotacoesPDF([c], sanitizeFilename(`${c.codigo || c.produto}_${c.id}`), `Cotação: ${c.produto || c.codigo}`)}
+                                      >
+                                        <Download className="h-3 w-3" /> PDF
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost"
+                                        className="h-6 text-[10px] px-2 text-muted-foreground"
+                                        onClick={() => {
+                                          if (c.precoCompraUSD != null) {
+                                            saveItems([...vendaItems, {
+                                              id: Date.now().toString(),
+                                              descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
+                                              fornecedor: c.fornecedor ?? "",
+                                              unidade: "UN",
+                                              precoCompraUSD: String(c.precoCompraUSD),
+                                              qtd: String(c.qtd),
+                                              freteUSD: String(c.freteUSD),
+                                              impostoPct: String(c.impostoPct),
+                                              cambio: String(c.cambio),
+                                              precoVendaBRL: c.precoVendaBRL != null ? String(c.precoVendaBRL) : "",
+                                            }]);
+                                            toast.success("Item adicionado ao simulador.");
+                                          }
+                                        }}
+                                      >
+                                        + Simulador
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost"
+                                        className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
+                                        onClick={() => handleDeleteCotacao(c.id)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {c.observacao && (
-                          <p className="text-[11px] text-muted-foreground mt-1 italic">{c.observacao}</p>
-                        )}
-                        <div className="flex gap-2 mt-2">
-                          <Button
-                            size="sm" variant="outline"
-                            className="h-6 text-[10px] px-2"
-                            onClick={() => handleApplyCotacao(c)}
-                          >
-                            Carregar
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-6 text-[10px] px-2 text-muted-foreground"
-                            onClick={() => {
-                              // Add to simulador
-                              if (c.precoCompraUSD != null) {
-                                saveItems([...vendaItems, {
-                                  id: Date.now().toString(),
-                                  descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
-                                  fornecedor: c.fornecedor ?? "",
-                                  unidade: "UN",
-                                  precoCompraUSD: String(c.precoCompraUSD),
-                                  qtd: String(c.qtd),
-                                  freteUSD: String(c.freteUSD),
-                                  impostoPct: String(c.impostoPct),
-                                  cambio: String(c.cambio),
-                                  precoVendaBRL: c.precoVendaBRL != null ? String(c.precoVendaBRL) : "",
-                                }]);
-                                toast.success("Item adicionado ao simulador.");
-                              }
-                            }}
-                          >
-                            + Simulador
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteCotacao(c.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           )}
