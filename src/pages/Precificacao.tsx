@@ -487,12 +487,31 @@ export default function Precificacao() {
   // ── Cotações salvas ─────────────────────────────────────────────────
   const [cotacoes, setCotacoes] = useState<CotacaoSalva[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [pastasAbertas, setPastasAbertas] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (userId !== "anonymous") {
       setCotacoes(readCotacoes(userId));
     }
   }, [userId]);
+
+  const cotacoesPorPasta = useMemo(() => {
+    const map = new Map<string, CotacaoSalva[]>();
+    for (const c of cotacoes) {
+      const k = c.pasta || "Sem pasta";
+      const arr = map.get(k) ?? [];
+      arr.push(c);
+      map.set(k, arr);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [cotacoes]);
+
+  const pastasExistentes = useMemo(
+    () => Array.from(new Set(cotacoes.map((c) => c.pasta).filter(Boolean))).sort(),
+    [cotacoes],
+  );
+
+  const togglePasta = (p: string) => setPastasAbertas((s) => ({ ...s, [p]: !s[p] }));
 
   const handleSaveCotacao = () => {
     if (!cotacaoForm.produto && !cotacaoForm.codigo) {
