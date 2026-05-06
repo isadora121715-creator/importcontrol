@@ -126,6 +126,8 @@ function calcCotacao(
 
 // ─────────────────────────────────────────────
 // Product search hook
+// Queries `pedidos` first (has both preco_compra + preco_venda),
+// falls back to catalogo_materiais if no rows found.
 // ─────────────────────────────────────────────
 
 function useProductSearch(query: string) {
@@ -140,25 +142,76 @@ function useProductSearch(query: string) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
+        // ── 1. Search pedidos — has preco_compra AND preco_venda ──────────
+        const { data: pedidosData } = await supabase
+          .from("pedidos")
+          .select("codigo, descricao, preco_compra, preco_venda, fornecedor, categoria")
+          .or(`codigo.ilike.%${query.trim()}%,descricao.ilike.%${query.trim()}%`)
+          .not("descricao", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(80);
+
+        if (pedidosData && pedidosData.length > 0) {
+          // Deduplicate by codigo (uppercase) or descricao
+          const seen = new Map<string, CatalogoItem>();
+
+          for (const r of pedidosData) {
+            const codigoNorm = (r.codigo ?? "").trim().toUpperCase();
+            const descNorm   = (r.descricao ?? "").trim();
+            const key = codigoNorm || descNorm.toLowerCase().slice(0, 60);
+            if (!key) continue;
+
+            if (!seen.has(key)) {
+              seen.set(key, {
+                id: key,
+                codigo: r.codigo ?? "",
+                descricao: r.descricao ?? "",
+                preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
+                preco_venda:  r.preco_venda  != null ? Number(r.preco_venda)  : null,
+                fornecedores: r.fornecedor ? [r.fornecedor] : [],
+                categorias:   r.categoria  ? [r.categoria]  : [],
+              });
+            } else {
+              // Merge: accumulate suppliers/categories, fill missing prices
+              const existing = seen.get(key)!;
+              if (r.preco_compra != null && existing.preco_compra == null) {
+                existing.preco_compra = Number(r.preco_compra);
+              }
+              if (r.preco_venda != null && existing.preco_venda == null) {
+                existing.preco_venda = Number(r.preco_venda);
+              }
+              if (r.fornecedor && !existing.fornecedores.includes(r.fornecedor)) {
+                existing.fornecedores.push(r.fornecedor);
+              }
+              if (r.categoria && !existing.categorias.includes(r.categoria)) {
+                existing.categorias.push(r.categoria);
+              }
+            }
+          }
+
+          setResults(Array.from(seen.values()).slice(0, 12));
+          return;
+        }
+
+        // ── 2. Fallback: catalogo_materiais (preco_venda not stored) ──────
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
+        const { data: catalogoData } = await (supabase as any)
           .from("catalogo_materiais")
           .select("id, codigo, descricao, preco_compra, fornecedores, categorias")
-          .or(`codigo.ilike.%${query}%,descricao.ilike.%${query}%`)
+          .or(`codigo.ilike.%${query.trim()}%,descricao.ilike.%${query.trim()}%`)
           .order("ultima_atualizacao", { ascending: false })
           .limit(12);
-        setResults(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((data ?? []) as any[]).map((r) => ({
-            id: r.id as string,
-            codigo: r.codigo as string ?? "",
-            descricao: r.descricao as string ?? "",
-            preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
-            preco_venda: null,
-            fornecedores: (r.fornecedores as string[]) ?? [],
-            categorias: (r.categorias as string[]) ?? [],
-          })),
-        );
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setResults(((catalogoData ?? []) as any[]).map((r) => ({
+          id: r.id as string,
+          codigo:       (r.codigo      as string) ?? "",
+          descricao:    (r.descricao   as string) ?? "",
+          preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
+          preco_venda:  null,
+          fornecedores: (r.fornecedores as string[]) ?? [],
+          categorias:   (r.categorias  as string[]) ?? [],
+        })));
       } catch {
         setResults([]);
       } finally {
@@ -320,10 +373,11 @@ export default function Precificacao() {
     setShowDropdown(false);
     setCotacaoForm((f) => ({
       ...f,
-      produto: item.descricao,
-      codigo: item.codigo,
-      fornecedor: item.fornecedores[0] ?? "",
+      produto:        item.descricao,
+      codigo:         item.codigo,
+      fornecedor:     item.fornecedores[0] ?? f.fornecedor,
       precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
+      precoVendaBRL:  item.preco_venda  != null ? String(item.preco_venda)  : f.precoVendaBRL,
     }));
   }, []);
 
@@ -617,27 +671,35 @@ export default function Precificacao() {
                     >
                       <div className="flex items-start gap-2">
                         <Package className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate">{item.descricao || item.codigo}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold">{item.descricao || item.codigo}</p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {item.codigo && (
-                              <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 rounded">
+                              <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">
                                 {item.codigo}
                               </span>
                             )}
+                            {item.categorias.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground opacity-70">
+                                {item.categorias.join(" · ")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
                             {item.preco_compra != null && (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                                $ {item.preco_compra.toFixed(2)}
+                              <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                                Compra: $ {item.preco_compra.toFixed(2)}
+                              </span>
+                            )}
+                            {item.preco_venda != null && (
+                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                Venda: R$ {item.preco_venda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             )}
                             {item.fornecedores.length > 0 && (
                               <span className="text-[10px] text-muted-foreground">
                                 {item.fornecedores.slice(0, 2).join(", ")}
-                              </span>
-                            )}
-                            {item.categorias.length > 0 && (
-                              <span className="text-[10px] text-muted-foreground opacity-60">
-                                {item.categorias.join(" · ")}
+                                {item.fornecedores.length > 2 && ` +${item.fornecedores.length - 2}`}
                               </span>
                             )}
                           </div>
@@ -706,8 +768,8 @@ export default function Precificacao() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Preço Compra (USD/un)
                   {selectedProduct?.preco_compra != null && (
-                    <span className="ml-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-                      (ref: $ {selectedProduct.preco_compra.toFixed(2)})
+                    <span className="ml-1 text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                      ← ref: $ {selectedProduct.preco_compra.toFixed(2)}
                     </span>
                   )}
                 </label>
@@ -716,19 +778,27 @@ export default function Precificacao() {
                   placeholder="0.00"
                   value={cotacaoForm.precoCompraUSD}
                   onChange={(e) => setCotacaoForm((f) => ({ ...f, precoCompraUSD: e.target.value }))}
-                  className={cn(cotacaoForm.precoCompraUSD && "border-emerald-500/50 focus:border-emerald-500")}
+                  className={cn(cotacaoForm.precoCompraUSD && "border-blue-500/50 focus:border-blue-500")}
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
-                  Preço Venda (R$/un) <span className="text-[10px] opacity-60">opcional</span>
+                  Preço Venda (R$/un)
+                  {selectedProduct?.preco_venda != null && (
+                    <span className="ml-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                      ← ref: R$ {selectedProduct.preco_venda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  )}
+                  {selectedProduct?.preco_venda == null && (
+                    <span className="ml-1 text-[10px] opacity-50">opcional</span>
+                  )}
                 </label>
                 <Input
                   type="number" min="0" step="0.01"
                   placeholder="0,00"
                   value={cotacaoForm.precoVendaBRL}
                   onChange={(e) => setCotacaoForm((f) => ({ ...f, precoVendaBRL: e.target.value }))}
-                  className={cn(cotacaoForm.precoVendaBRL && "border-blue-500/50 focus:border-blue-500")}
+                  className={cn(cotacaoForm.precoVendaBRL && "border-emerald-500/50 focus:border-emerald-500")}
                 />
               </div>
               <div>
