@@ -3,7 +3,11 @@ import {
   DollarSign, Percent, Trash2, TrendingUp, Search, BookmarkPlus,
   ChevronDown, ChevronUp, Building2, Package, Clock, Star, X,
   FileText, Calculator, History, AlertCircle, CheckCircle2,
+  Folder, FolderOpen, Download, FileSpreadsheet, FileDown,
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,6 +33,7 @@ interface CatalogoItem {
 interface CotacaoSalva {
   id: string;
   criadoEm: string;
+  pasta: string;
   produto: string;
   codigo: string;
   fornecedor: string;
@@ -48,6 +53,8 @@ interface CotacaoSalva {
 interface VendaItem {
   id: string;
   descricao: string;
+  fornecedor: string;
+  unidade: string;
   precoCompraUSD: string;
   qtd: string;
   freteUSD: string;
@@ -64,6 +71,8 @@ const VENDA_STORAGE_KEY = "embarques.simulador_venda.v1";
 
 const FORM_EMPTY: Omit<VendaItem, "id"> = {
   descricao: "",
+  fornecedor: "",
+  unidade: "UN",
   precoCompraUSD: "",
   qtd: "1",
   freteUSD: "",
@@ -142,76 +151,69 @@ function useProductSearch(query: string) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        // ── 1. Search pedidos — has preco_compra AND preco_venda ──────────
-        const { data: pedidosData } = await supabase
-          .from("pedidos")
-          .select("codigo, descricao, preco_compra, preco_venda, fornecedor, categoria")
-          .or(`codigo.ilike.%${query.trim()}%,descricao.ilike.%${query.trim()}%`)
-          .not("descricao", "is", null)
-          .order("created_at", { ascending: false })
-          .limit(80);
+        const filter = `codigo.ilike.%${query}%,descricao.ilike.%${query}%`;
+        const [catRes, pedRes] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("catalogo_materiais")
+            .select("id, codigo, descricao, preco_compra, fornecedores, categorias")
+            .or(filter)
+            .order("ultima_atualizacao", { ascending: false })
+            .limit(15),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("pedidos")
+            .select("id, codigo, descricao, preco_compra, fornecedor, categoria")
+            .or(filter)
+            .order("created_at", { ascending: false })
+            .limit(30),
+        ]);
 
-        if (pedidosData && pedidosData.length > 0) {
-          // Deduplicate by codigo (uppercase) or descricao
-          const seen = new Map<string, CatalogoItem>();
+        const merged = new Map<string, CatalogoItem>();
 
-          for (const r of pedidosData) {
-            const codigoNorm = (r.codigo ?? "").trim().toUpperCase();
-            const descNorm   = (r.descricao ?? "").trim();
-            const key = codigoNorm || descNorm.toLowerCase().slice(0, 60);
-            if (!key) continue;
-
-            if (!seen.has(key)) {
-              seen.set(key, {
-                id: key,
-                codigo: r.codigo ?? "",
-                descricao: r.descricao ?? "",
-                preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
-                preco_venda:  r.preco_venda  != null ? Number(r.preco_venda)  : null,
-                fornecedores: r.fornecedor ? [r.fornecedor] : [],
-                categorias:   r.categoria  ? [r.categoria]  : [],
-              });
-            } else {
-              // Merge: accumulate suppliers/categories, fill missing prices
-              const existing = seen.get(key)!;
-              if (r.preco_compra != null && existing.preco_compra == null) {
-                existing.preco_compra = Number(r.preco_compra);
-              }
-              if (r.preco_venda != null && existing.preco_venda == null) {
-                existing.preco_venda = Number(r.preco_venda);
-              }
-              if (r.fornecedor && !existing.fornecedores.includes(r.fornecedor)) {
-                existing.fornecedores.push(r.fornecedor);
-              }
-              if (r.categoria && !existing.categorias.includes(r.categoria)) {
-                existing.categorias.push(r.categoria);
-              }
-            }
-          }
-
-          setResults(Array.from(seen.values()).slice(0, 12));
-          return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of (catRes.data ?? []) as any[]) {
+          const key = (r.codigo || r.descricao || r.id || "").toString().trim().toUpperCase();
+          if (!key) continue;
+          merged.set(key, {
+            id: r.id as string,
+            codigo: (r.codigo as string) ?? "",
+            descricao: (r.descricao as string) ?? "",
+            preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
+            preco_venda: null,
+            fornecedores: (r.fornecedores as string[]) ?? [],
+            categorias: (r.categorias as string[]) ?? [],
+          });
         }
 
-        // ── 2. Fallback: catalogo_materiais (preco_venda not stored) ──────
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: catalogoData } = await (supabase as any)
-          .from("catalogo_materiais")
-          .select("id, codigo, descricao, preco_compra, fornecedores, categorias")
-          .or(`codigo.ilike.%${query.trim()}%,descricao.ilike.%${query.trim()}%`)
-          .order("ultima_atualizacao", { ascending: false })
-          .limit(12);
+        for (const r of (pedRes.data ?? []) as any[]) {
+          const codigo = ((r.codigo as string) ?? "").trim();
+          const descricao = ((r.descricao as string) ?? "").trim();
+          const key = (codigo || descricao).toUpperCase();
+          if (!key) continue;
+          const fornecedor = ((r.fornecedor as string) ?? "").trim();
+          const categoria = ((r.categoria as string) ?? "").trim();
+          const preco = r.preco_compra != null ? Number(r.preco_compra) : null;
+          const existing = merged.get(key);
+          if (existing) {
+            if (existing.preco_compra == null && preco != null) existing.preco_compra = preco;
+            if (fornecedor && !existing.fornecedores.includes(fornecedor)) existing.fornecedores.push(fornecedor);
+            if (categoria && !existing.categorias.includes(categoria)) existing.categorias.push(categoria);
+          } else {
+            merged.set(key, {
+              id: `pedido:${r.id}`,
+              codigo,
+              descricao,
+              preco_compra: preco,
+              preco_venda: null,
+              fornecedores: fornecedor ? [fornecedor] : [],
+              categorias: categoria ? [categoria] : [],
+            });
+          }
+        }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setResults(((catalogoData ?? []) as any[]).map((r) => ({
-          id: r.id as string,
-          codigo:       (r.codigo      as string) ?? "",
-          descricao:    (r.descricao   as string) ?? "",
-          preco_compra: r.preco_compra != null ? Number(r.preco_compra) : null,
-          preco_venda:  null,
-          fornecedores: (r.fornecedores as string[]) ?? [],
-          categorias:   (r.categorias  as string[]) ?? [],
-        })));
+        setResults(Array.from(merged.values()).slice(0, 20));
       } catch {
         setResults([]);
       } finally {
@@ -258,6 +260,7 @@ function useCurrentUser() {
 // ─────────────────────────────────────────────
 
 interface CotacaoFormState {
+  pasta: string;
   produto: string;
   codigo: string;
   fornecedor: string;
@@ -271,10 +274,69 @@ interface CotacaoFormState {
 }
 
 const COTACAO_EMPTY: CotacaoFormState = {
-  produto: "", codigo: "", fornecedor: "",
+  pasta: "", produto: "", codigo: "", fornecedor: "",
   precoCompraUSD: "", precoVendaBRL: "",
   qtd: "1", freteUSD: "", impostoPct: "", cambio: "5.20", observacao: "",
 };
+
+// Export helpers
+function exportCotacoesXLSX(items: CotacaoSalva[], filename: string) {
+  const rows = items.map((c) => ({
+    Pasta: c.pasta || "(sem pasta)",
+    Data: new Date(c.criadoEm).toLocaleString("pt-BR"),
+    Codigo: c.codigo,
+    Produto: c.produto,
+    Fornecedor: c.fornecedor,
+    Qtd: c.qtd,
+    "Preco Compra (USD)": c.precoCompraUSD ?? "",
+    "Frete (USD)": c.freteUSD,
+    "Impostos (%)": c.impostoPct,
+    "Cambio": c.cambio,
+    "Custo Unit (R$)": Number(c.custoUnitBRL.toFixed(2)),
+    "Venda Minima (R$)": Number(c.vendaMinBRL.toFixed(2)),
+    "Preco Venda (R$)": c.precoVendaBRL ?? "",
+    "Margem Real (%)": c.margemReal != null ? Number(c.margemReal.toFixed(2)) : "",
+    "Margem Alvo (%)": c.margem,
+    Observacao: c.observacao,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cotacoes");
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+function exportCotacoesPDF(items: CotacaoSalva[], filename: string, titulo: string) {
+  const doc = new jsPDF({ orientation: "landscape" });
+  doc.setFontSize(14);
+  doc.text(titulo, 14, 15);
+  doc.setFontSize(9);
+  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")} · ${items.length} cotação(ões)`, 14, 21);
+
+  autoTable(doc, {
+    startY: 26,
+    head: [["Data", "Código", "Produto", "Fornecedor", "Qtd", "Compra USD", "Custo R$", "Venda Mín R$", "Venda R$", "Margem"]],
+    body: items.map((c) => [
+      new Date(c.criadoEm).toLocaleDateString("pt-BR"),
+      c.codigo || "-",
+      (c.produto || "").slice(0, 40),
+      (c.fornecedor || "").slice(0, 20),
+      String(c.qtd),
+      c.precoCompraUSD != null ? `$${c.precoCompraUSD.toFixed(2)}` : "-",
+      c.custoUnitBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      c.vendaMinBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      c.precoVendaBRL != null ? c.precoVendaBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "-",
+      c.margemReal != null ? `${c.margemReal.toFixed(1)}%` : "-",
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [124, 58, 237] },
+  });
+
+  doc.save(`${filename}.pdf`);
+}
+
+function sanitizeFilename(s: string) {
+  return (s || "cotacoes").replace(/[^\w\-]+/g, "_").slice(0, 60);
+}
 
 // ─────────────────────────────────────────────
 // Main page
@@ -293,6 +355,33 @@ export default function Precificacao() {
     } catch { return []; }
   });
   const [vendaForm, setVendaForm] = useState<Omit<VendaItem, "id">>(FORM_EMPTY);
+  const [vendaSearch, setVendaSearch] = useState("");
+  const [vendaShowDropdown, setVendaShowDropdown] = useState(false);
+  const vendaSearchRef = useRef<HTMLDivElement>(null);
+  const { results: vendaResults, loading: vendaLoading } = useProductSearch(vendaSearch);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (vendaSearchRef.current && !vendaSearchRef.current.contains(e.target as Node)) {
+        setVendaShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelectVendaProduct = (item: CatalogoItem) => {
+    const desc = item.codigo ? `${item.codigo} - ${item.descricao}` : item.descricao;
+    setVendaForm((f) => ({
+      ...f,
+      descricao: desc,
+      fornecedor: item.fornecedores[0] ?? f.fornecedor,
+      unidade: f.unidade || "UN",
+      precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
+    }));
+    setVendaSearch(desc);
+    setVendaShowDropdown(false);
+  };
 
   const saveItems = (items: VendaItem[]) => {
     setVendaItems(items);
@@ -401,12 +490,31 @@ export default function Precificacao() {
   // ── Cotações salvas ─────────────────────────────────────────────────
   const [cotacoes, setCotacoes] = useState<CotacaoSalva[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [pastasAbertas, setPastasAbertas] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (userId !== "anonymous") {
       setCotacoes(readCotacoes(userId));
     }
   }, [userId]);
+
+  const cotacoesPorPasta = useMemo(() => {
+    const map = new Map<string, CotacaoSalva[]>();
+    for (const c of cotacoes) {
+      const k = c.pasta || "Sem pasta";
+      const arr = map.get(k) ?? [];
+      arr.push(c);
+      map.set(k, arr);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [cotacoes]);
+
+  const pastasExistentes = useMemo(
+    () => Array.from(new Set(cotacoes.map((c) => c.pasta).filter(Boolean))).sort(),
+    [cotacoes],
+  );
+
+  const togglePasta = (p: string) => setPastasAbertas((s) => ({ ...s, [p]: !s[p] }));
 
   const handleSaveCotacao = () => {
     if (!cotacaoForm.produto && !cotacaoForm.codigo) {
@@ -422,6 +530,7 @@ export default function Precificacao() {
     const nova: CotacaoSalva = {
       id: Date.now().toString(),
       criadoEm: new Date().toISOString(),
+      pasta: cotacaoForm.pasta.trim() || "Sem pasta",
       produto: cotacaoForm.produto || cotacaoForm.codigo,
       codigo: cotacaoForm.codigo,
       fornecedor: cotacaoForm.fornecedor,
@@ -454,6 +563,7 @@ export default function Precificacao() {
 
   const handleApplyCotacao = (c: CotacaoSalva) => {
     setCotacaoForm({
+      pasta: c.pasta || "",
       produto: c.produto,
       codigo: c.codigo,
       fornecedor: c.fornecedor,
@@ -732,6 +842,21 @@ export default function Precificacao() {
             {/* Form fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="lg:col-span-2">
+                <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
+                  <Folder className="h-3 w-3 text-amber-500" /> Pasta da Cotação
+                  <span className="text-[10px] opacity-60">(ex: Cotação 01 - CL90ST)</span>
+                </label>
+                <Input
+                  placeholder="Nome da pasta para agrupar esta cotação"
+                  list="pastas-cotacoes"
+                  value={cotacaoForm.pasta}
+                  onChange={(e) => setCotacaoForm((f) => ({ ...f, pasta: e.target.value }))}
+                />
+                <datalist id="pastas-cotacoes">
+                  {pastasExistentes.map((p) => <option key={p} value={p} />)}
+                </datalist>
+              </div>
+              <div className="lg:col-span-2">
                 <label className="text-xs text-muted-foreground mb-1 block">Descrição do Produto</label>
                 <Input
                   placeholder="Nome / descrição do produto"
@@ -914,6 +1039,58 @@ export default function Precificacao() {
                   <BookmarkPlus className="h-4 w-4" />
                   Salvar Cotação
                 </Button>
+                <div className="flex gap-1">
+                  <Button
+                    variant="outline" size="sm" className="flex-1 h-7 text-[11px] gap-1"
+                    disabled={!cotacaoCalc}
+                    onClick={() => {
+                      const calc = cotacaoCalc!;
+                      const item: CotacaoSalva = {
+                        id: "preview", criadoEm: new Date().toISOString(),
+                        pasta: cotacaoForm.pasta || "Cotação atual",
+                        produto: cotacaoForm.produto, codigo: cotacaoForm.codigo,
+                        fornecedor: cotacaoForm.fornecedor,
+                        precoCompraUSD: Number(cotacaoForm.precoCompraUSD) || null,
+                        precoVendaBRL: Number(cotacaoForm.precoVendaBRL) || null,
+                        qtd: Number(cotacaoForm.qtd) || 1,
+                        freteUSD: Number(cotacaoForm.freteUSD) || 0,
+                        impostoPct: Number(cotacaoForm.impostoPct) || 0,
+                        cambio: Number(cotacaoForm.cambio) || 5.20,
+                        custoUnitBRL: calc.custoUnitBRL, vendaMinBRL: calc.vendaMinBRL,
+                        margemReal: calc.margemReal, margem: margemNum,
+                        observacao: cotacaoForm.observacao,
+                      };
+                      exportCotacoesXLSX([item], sanitizeFilename(cotacaoForm.pasta || cotacaoForm.codigo || cotacaoForm.produto || "cotacao"));
+                    }}
+                  >
+                    <FileSpreadsheet className="h-3 w-3 text-emerald-600" /> XLSX
+                  </Button>
+                  <Button
+                    variant="outline" size="sm" className="flex-1 h-7 text-[11px] gap-1"
+                    disabled={!cotacaoCalc}
+                    onClick={() => {
+                      const calc = cotacaoCalc!;
+                      const item: CotacaoSalva = {
+                        id: "preview", criadoEm: new Date().toISOString(),
+                        pasta: cotacaoForm.pasta || "Cotação atual",
+                        produto: cotacaoForm.produto, codigo: cotacaoForm.codigo,
+                        fornecedor: cotacaoForm.fornecedor,
+                        precoCompraUSD: Number(cotacaoForm.precoCompraUSD) || null,
+                        precoVendaBRL: Number(cotacaoForm.precoVendaBRL) || null,
+                        qtd: Number(cotacaoForm.qtd) || 1,
+                        freteUSD: Number(cotacaoForm.freteUSD) || 0,
+                        impostoPct: Number(cotacaoForm.impostoPct) || 0,
+                        cambio: Number(cotacaoForm.cambio) || 5.20,
+                        custoUnitBRL: calc.custoUnitBRL, vendaMinBRL: calc.vendaMinBRL,
+                        margemReal: calc.margemReal, margem: margemNum,
+                        observacao: cotacaoForm.observacao,
+                      };
+                      exportCotacoesPDF([item], sanitizeFilename(cotacaoForm.pasta || cotacaoForm.codigo || cotacaoForm.produto || "cotacao"), `Cotação: ${cotacaoForm.produto || cotacaoForm.codigo || "(sem nome)"}`);
+                    }}
+                  >
+                    <FileDown className="h-3 w-3 text-red-600" /> PDF
+                  </Button>
+                </div>
                 <p className="text-[10px] text-muted-foreground text-center">
                   Salvo como: <span className="font-semibold">{displayName}</span>
                 </p>
@@ -957,102 +1134,169 @@ export default function Precificacao() {
                   Nenhuma cotação salva ainda. Faça sua primeira cotação acima.
                 </p>
               ) : (
-                <div className="space-y-2">
-                  {cotacoes.map((c) => (
-                    <div key={c.id} className="flex items-start gap-3 rounded-lg border border-border/40 p-3 hover:bg-muted/20 transition-colors">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 mt-0.5">
-                        <Star className="h-3.5 w-3.5 text-amber-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 flex-wrap">
-                          <div>
-                            <p className="text-sm font-semibold truncate">{c.produto || c.codigo || "—"}</p>
-                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                              {c.codigo && (
-                                <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 rounded">{c.codigo}</span>
-                              )}
-                              {c.fornecedor && (
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                  <Building2 className="h-2.5 w-2.5" />{c.fornecedor}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                <Clock className="h-2.5 w-2.5" />
-                                {new Date(c.criadoEm).toLocaleDateString("pt-BR")} {new Date(c.criadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
+                <>
+                  <div className="flex items-center justify-end gap-2 mb-3 flex-wrap">
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => exportCotacoesXLSX(cotacoes, `cotacoes_${sanitizeFilename(displayName)}_${new Date().toISOString().slice(0,10)}`)}
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Exportar tudo (XLSX)
+                    </Button>
+                    <Button
+                      size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => exportCotacoesPDF(cotacoes, `cotacoes_${sanitizeFilename(displayName)}_${new Date().toISOString().slice(0,10)}`, `Todas as Cotações — ${displayName}`)}
+                    >
+                      <FileDown className="h-3.5 w-3.5 text-red-600" /> Exportar tudo (PDF)
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {cotacoesPorPasta.map(([pasta, lista]) => {
+                      const aberta = pastasAbertas[pasta] ?? true;
+                      return (
+                        <div key={pasta} className="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                          <div className="flex items-center justify-between gap-2 px-3 py-2 bg-amber-500/10 flex-wrap">
+                            <button
+                              className="flex items-center gap-2 text-left flex-1 min-w-0"
+                              onClick={() => togglePasta(pasta)}
+                            >
+                              {aberta ? <FolderOpen className="h-4 w-4 text-amber-600 shrink-0" /> : <Folder className="h-4 w-4 text-amber-600 shrink-0" />}
+                              <span className="text-sm font-semibold truncate">{pasta}</span>
+                              <Badge variant="outline" className="text-[10px] border-amber-500/40">{lista.length}</Badge>
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                onClick={() => exportCotacoesXLSX(lista, sanitizeFilename(pasta))}
+                                title="Baixar pasta em Excel"
+                              >
+                                <FileSpreadsheet className="h-3 w-3 text-emerald-600" /> XLSX
+                              </Button>
+                              <Button
+                                size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                onClick={() => exportCotacoesPDF(lista, sanitizeFilename(pasta), `Pasta: ${pasta}`)}
+                                title="Baixar pasta em PDF"
+                              >
+                                <FileDown className="h-3 w-3 text-red-600" /> PDF
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                            {c.precoCompraUSD != null && (
-                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                                Compra: $ {c.precoCompraUSD.toFixed(2)}
-                              </span>
-                            )}
-                            {c.precoVendaBRL != null && (
-                              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                Venda: {c.precoVendaBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                              </span>
-                            )}
-                            {c.margemReal != null && (
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px]",
-                                  c.margemReal >= c.margem
-                                    ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                                    : "border-red-500/40 text-red-600 dark:text-red-400",
-                                )}
-                              >
-                                {c.margemReal.toFixed(1)}%
-                              </Badge>
-                            )}
-                          </div>
+
+                          {aberta && (
+                            <div className="p-2 space-y-2">
+                              {lista.map((c) => (
+                                <div key={c.id} className="flex items-start gap-3 rounded-lg border border-border/40 p-3 bg-card hover:bg-muted/20 transition-colors">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 mt-0.5">
+                                    <Star className="h-3.5 w-3.5 text-amber-500" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                                      <div>
+                                        <p className="text-sm font-semibold truncate">{c.produto || c.codigo || "—"}</p>
+                                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                          {c.codigo && (
+                                            <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 rounded">{c.codigo}</span>
+                                          )}
+                                          {c.fornecedor && (
+                                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                              <Building2 className="h-2.5 w-2.5" />{c.fornecedor}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                            <Clock className="h-2.5 w-2.5" />
+                                            {new Date(c.criadoEm).toLocaleDateString("pt-BR")} {new Date(c.criadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                                        {c.precoCompraUSD != null && (
+                                          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                                            Compra: $ {c.precoCompraUSD.toFixed(2)}
+                                          </span>
+                                        )}
+                                        {c.precoVendaBRL != null && (
+                                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                            Venda: {c.precoVendaBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                          </span>
+                                        )}
+                                        {c.margemReal != null && (
+                                          <Badge
+                                            variant="outline"
+                                            className={cn(
+                                              "text-[10px]",
+                                              c.margemReal >= c.margem
+                                                ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                                                : "border-red-500/40 text-red-600 dark:text-red-400",
+                                            )}
+                                          >
+                                            {c.margemReal.toFixed(1)}%
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {c.observacao && (
+                                      <p className="text-[11px] text-muted-foreground mt-1 italic">{c.observacao}</p>
+                                    )}
+                                    <div className="flex gap-2 mt-2 flex-wrap">
+                                      <Button
+                                        size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                                        onClick={() => handleApplyCotacao(c)}
+                                      >
+                                        Carregar
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                        onClick={() => exportCotacoesXLSX([c], sanitizeFilename(`${c.codigo || c.produto}_${c.id}`))}
+                                      >
+                                        <Download className="h-3 w-3" /> XLSX
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost" className="h-6 text-[10px] px-2 gap-1"
+                                        onClick={() => exportCotacoesPDF([c], sanitizeFilename(`${c.codigo || c.produto}_${c.id}`), `Cotação: ${c.produto || c.codigo}`)}
+                                      >
+                                        <Download className="h-3 w-3" /> PDF
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost"
+                                        className="h-6 text-[10px] px-2 text-muted-foreground"
+                                        onClick={() => {
+                                          if (c.precoCompraUSD != null) {
+                                            saveItems([...vendaItems, {
+                                              id: Date.now().toString(),
+                                              descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
+                                              fornecedor: c.fornecedor ?? "",
+                                              unidade: "UN",
+                                              precoCompraUSD: String(c.precoCompraUSD),
+                                              qtd: String(c.qtd),
+                                              freteUSD: String(c.freteUSD),
+                                              impostoPct: String(c.impostoPct),
+                                              cambio: String(c.cambio),
+                                              precoVendaBRL: c.precoVendaBRL != null ? String(c.precoVendaBRL) : "",
+                                            }]);
+                                            toast.success("Item adicionado ao simulador.");
+                                          }
+                                        }}
+                                      >
+                                        + Simulador
+                                      </Button>
+                                      <Button
+                                        size="sm" variant="ghost"
+                                        className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
+                                        onClick={() => handleDeleteCotacao(c.id)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {c.observacao && (
-                          <p className="text-[11px] text-muted-foreground mt-1 italic">{c.observacao}</p>
-                        )}
-                        <div className="flex gap-2 mt-2">
-                          <Button
-                            size="sm" variant="outline"
-                            className="h-6 text-[10px] px-2"
-                            onClick={() => handleApplyCotacao(c)}
-                          >
-                            Carregar
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-6 text-[10px] px-2 text-muted-foreground"
-                            onClick={() => {
-                              // Add to simulador
-                              if (c.precoCompraUSD != null) {
-                                saveItems([...vendaItems, {
-                                  id: Date.now().toString(),
-                                  descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
-                                  precoCompraUSD: String(c.precoCompraUSD),
-                                  qtd: String(c.qtd),
-                                  freteUSD: String(c.freteUSD),
-                                  impostoPct: String(c.impostoPct),
-                                  cambio: String(c.cambio),
-                                  precoVendaBRL: c.precoVendaBRL != null ? String(c.precoVendaBRL) : "",
-                                }]);
-                                toast.success("Item adicionado ao simulador.");
-                              }
-                            }}
-                          >
-                            + Simulador
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteCotacao(c.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -1099,12 +1343,61 @@ export default function Precificacao() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="md:col-span-2">
                   <label className="text-xs text-muted-foreground mb-1 block">Descrição / Código</label>
-                  <Input
-                    placeholder="Ex: Válvula DN50 PN16"
-                    value={vendaForm.descricao}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, descricao: e.target.value }))}
-                    onKeyDown={(e) => e.key === "Enter" && addItem()}
-                  />
+                  <div ref={vendaSearchRef} className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="Pesquise por código ou descrição..."
+                        value={vendaSearch}
+                        className="pl-8"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setVendaSearch(v);
+                          setVendaForm((f) => ({ ...f, descricao: v }));
+                          setVendaShowDropdown(true);
+                        }}
+                        onFocus={() => setVendaShowDropdown(true)}
+                        onKeyDown={(e) => e.key === "Enter" && addItem()}
+                      />
+                    </div>
+                    {vendaShowDropdown && vendaSearch.trim().length >= 2 && (
+                      <div className="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg">
+                        {vendaLoading && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>
+                        )}
+                        {!vendaLoading && vendaResults.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum item encontrado.</div>
+                        )}
+                        {vendaResults.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleSelectVendaProduct(item)}
+                            className="w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-0 transition-colors"
+                          >
+                            <p className="text-xs font-semibold truncate">{item.descricao || item.codigo}</p>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                              {item.codigo && <span className="font-mono">{item.codigo}</span>}
+                              {item.preco_compra != null && (
+                                <span className="text-primary">USD {item.preco_compra.toFixed(2)}</span>
+                              )}
+                              {item.fornecedores[0] && <span className="truncate">• {item.fornecedores[0]}</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Fornecedor</label>
+                  <Input placeholder="Nome do fornecedor" value={vendaForm.fornecedor}
+                    onChange={(e) => setVendaForm((f) => ({ ...f, fornecedor: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Unidade</label>
+                  <Input placeholder="UN" value={vendaForm.unidade}
+                    onChange={(e) => setVendaForm((f) => ({ ...f, unidade: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Preço Compra (USD/un)</label>
@@ -1158,8 +1451,13 @@ export default function Precificacao() {
                   <tbody>
                     {calcs.map(({ item, c }) => (
                       <tr key={item.id} className={cn("border-b last:border-0 hover:bg-muted/30 transition-colors", c.abaixoMinimo && "bg-red-50 dark:bg-red-950/20")}>
-                        <td className="px-3 py-2 font-medium">{item.descricao}</td>
-                        <td className="px-3 py-2 text-center">{c.qtd}</td>
+                        <td className="px-3 py-2 font-medium">
+                          <div>{item.descricao}</div>
+                          {item.fornecedor && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{item.fornecedor}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">{c.qtd}{item.unidade ? ` ${item.unidade}` : ""}</td>
                         <td className="px-3 py-2 num">$ {c.custoUnitUSD.toFixed(2)}</td>
                         <td className="px-3 py-2 num">$ {(Number(item.freteUSD) / c.qtd || 0).toFixed(2)}</td>
                         <td className="px-3 py-2 num">{c.custoUnitBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
