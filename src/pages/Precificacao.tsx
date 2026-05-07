@@ -431,8 +431,10 @@ export default function Precificacao() {
     const custoMaxBRL  = venda * (1 - mg / 100);
     const custoMaxUSD  = custoMaxBRL / (cambio * (1 + imposto / 100));
     const compraMaxUSD = custoMaxUSD - frete;
-    return { venda, custoMaxBRL, custoMaxUSD, compraMaxUSD, lucro: venda - custoMaxBRL, mg };
-  }, [modoA_venda, modoA_cambio, modoA_frete, modoA_imposto, margemNum]);
+    const fatorReal     = compraMaxUSD > 0 ? venda / compraMaxUSD : null;
+    const compraPorFator = fatorNum > 0 ? venda / fatorNum : null;
+    return { venda, custoMaxBRL, custoMaxUSD, compraMaxUSD, lucro: venda - custoMaxBRL, mg, fatorReal, compraPorFator };
+  }, [modoA_venda, modoA_cambio, modoA_frete, modoA_imposto, margemNum, fatorNum]);
 
   const [modoB_compra,  setModoB_compra]  = useState("");
   const [modoB_cambio,  setModoB_cambio]  = useState("5.20");
@@ -448,8 +450,10 @@ export default function Precificacao() {
     if (!compra) return null;
     const custoBRL    = (compra + frete) * cambio * (1 + imposto / 100);
     const vendaMinBRL = custoBRL / (1 - mg / 100);
-    return { compra, custoBRL, vendaMinBRL, lucro: vendaMinBRL - custoBRL, mg };
-  }, [modoB_compra, modoB_cambio, modoB_frete, modoB_imposto, margemNum]);
+    const fatorReal     = compra > 0 ? vendaMinBRL / compra : null;
+    const vendaPorFator = fatorNum > 0 ? compra * fatorNum : null;
+    return { compra, custoBRL, vendaMinBRL, lucro: vendaMinBRL - custoBRL, mg, fatorReal, vendaPorFator };
+  }, [modoB_compra, modoB_cambio, modoB_frete, modoB_imposto, margemNum, fatorNum]);
 
   // ── Cotação por produto ─────────────────────────────────────────────
   const [searchQuery, setSearchQuery]     = useState("");
@@ -714,6 +718,20 @@ export default function Precificacao() {
                       $ {resultA.compraMaxUSD > 0 ? resultA.compraMaxUSD.toFixed(2) : "—"}
                     </span>
                   </div>
+                  {resultA.fatorReal !== null && (
+                    <div className="border-t pt-2 flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Fator real (Venda R$ ÷ Compra USD)</span>
+                      <span className={cn("font-bold", resultA.fatorReal >= fatorNum ? "text-emerald-500" : "text-red-500")}>
+                        {resultA.fatorReal.toFixed(2)}×
+                      </span>
+                    </div>
+                  )}
+                  {resultA.compraPorFator !== null && (
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Compra p/ fator {fatorNum}× (USD/un)</span>
+                      <span className="font-semibold text-blue-500">$ {resultA.compraPorFator.toFixed(2)}</span>
+                    </div>
+                  )}
                   <p className="text-[11px] text-muted-foreground text-center pt-1">
                     Lucro estimado: {resultA.lucro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · margem {resultA.mg}%
                   </p>
@@ -771,6 +789,22 @@ export default function Precificacao() {
                       {resultB.vendaMinBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     </span>
                   </div>
+                  {resultB.fatorReal !== null && (
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Fator real (Venda R$ ÷ Compra USD)</span>
+                      <span className={cn("font-bold", resultB.fatorReal >= fatorNum ? "text-emerald-500" : "text-red-500")}>
+                        {resultB.fatorReal.toFixed(2)}×
+                      </span>
+                    </div>
+                  )}
+                  {resultB.vendaPorFator !== null && (
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Venda p/ fator {fatorNum}× (R$/un)</span>
+                      <span className="font-semibold text-emerald-500">
+                        {resultB.vendaPorFator.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
+                    </div>
+                  )}
                   <p className="text-[11px] text-muted-foreground text-center pt-1">Margem sobre venda: {resultB.mg}%</p>
                 </div>
               ) : (
