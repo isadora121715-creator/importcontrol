@@ -648,6 +648,20 @@ export default function Precificacao() {
             />
             <span className="text-sm font-bold text-primary">%</span>
           </div>
+
+          {/* Fator alvo (Venda R$ ÷ Compra USD) */}
+          <div className="flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-2.5 shadow-sm">
+            <Calculator className="h-4 w-4 text-violet-500" />
+            <label className="text-sm font-medium whitespace-nowrap" title="Preço de Venda (R$) ÷ Preço de Compra (USD)">
+              Fator alvo
+            </label>
+            <Input
+              type="number" min="0.1" step="0.1" className="w-20 h-8 text-center font-bold"
+              value={fator}
+              onChange={(e) => setFator(e.target.value)}
+            />
+            <span className="text-sm font-bold text-violet-500">×</span>
+          </div>
         </div>
 
         {/* ── Calculadoras Rápidas ────────────────────────────────────── */}
