@@ -789,6 +789,22 @@ export default function Precificacao() {
                       {resultB.vendaMinBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                     </span>
                   </div>
+                  {resultB.fatorReal !== null && (
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Fator real (Venda R$ ÷ Compra USD)</span>
+                      <span className={cn("font-bold", resultB.fatorReal >= fatorNum ? "text-emerald-500" : "text-red-500")}>
+                        {resultB.fatorReal.toFixed(2)}×
+                      </span>
+                    </div>
+                  )}
+                  {resultB.vendaPorFator !== null && (
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Venda p/ fator {fatorNum}× (R$/un)</span>
+                      <span className="font-semibold text-emerald-500">
+                        {resultB.vendaPorFator.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
+                    </div>
+                  )}
                   <p className="text-[11px] text-muted-foreground text-center pt-1">Margem sobre venda: {resultB.mg}%</p>
                 </div>
               ) : (
