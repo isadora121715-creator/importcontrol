@@ -13,8 +13,11 @@ import {
   CheckCircle2,
   DownloadCloud,
   ChevronDown,
+  FileDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -841,6 +844,230 @@ const Embarques = () => {
   };
   const monthLabelKey = (key: string) => key;
 
+  // ── Export profissional: Excel multi-aba ────────────────────────────────────
+  const downloadIntlXLSX = () => {
+    if (intlRows.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    const today = new Date().toLocaleDateString("pt-BR");
+
+    // ── Sheet 1: KPIs ─────────────────────────────────────────────────────────
+    const kpiRows = [
+      ["RELATÓRIO — FRETES INTERNACIONAIS", "", today],
+      [],
+      ["Indicador", "Valor"],
+      ["Containers 20ft", intlTotals.cont20 || intlStats.containers["20ft"]],
+      ["Containers 40ft", intlTotals.cont40 || intlStats.containers["40ft"]],
+      ["Containers 45ft", intlTotals.cont45 || intlStats.containers["45ft"]],
+      ["Total de Containers", (intlTotals.cont20 || intlStats.containers["20ft"]) + (intlTotals.cont40 || intlStats.containers["40ft"]) + (intlTotals.cont45 || intlStats.containers["45ft"])],
+      ["Modalidade LCL", intlStats.modalidades.LCL],
+      ["Modalidade FCL", intlStats.modalidades.FCL],
+      ["Modalidade Aéreo", intlTotals.aereo || intlStats.modalidades.Aereo],
+      ["Total de Exportadores", intlStats.exportadores.length],
+      ["Total de Agentes", intlStats.agentes.length],
+      ["Registros Carregados", intlRows.length],
+      ["Registros Filtrados", intlRowsFiltradas.length],
+      ["Total de Meses", intlStats.meses.length],
+      ["Média Containers/Mês", parseFloat(intlStats.mediaContainers.toFixed(2))],
+      ["Arquivo", intlFileName || "—"],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kpiRows), "KPIs");
+
+    // ── Sheet 2: Detalhes por Mês ─────────────────────────────────────────────
+    const monthRows: unknown[][] = [
+      ["Mês", "Containers", "Peso (kg)"],
+      ...intlStats.detalhesPorMes.map((d) => [d.mes, d.containers, Math.round(d.peso)]),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(monthRows), "Por Mês");
+
+    // ── Sheet 3: Listagem de Fretes (dados filtrados, mesma formatação da planilha original) ──
+    const SKIP = new Set(["__qty20", "__qty40", "__qty45"]);
+    const exportCols = intlColumns.filter((c) => !SKIP.has(c));
+    const fmtDateX = (v: unknown): string => {
+      if (typeof v === "number" && v > 30000) {
+        const d = new Date(Math.floor(v - 25569) * 86400000);
+        return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+      }
+      if (typeof v === "string") {
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return v;
+        const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+      }
+      return v != null ? String(v) : "";
+    };
+    const isDateColX = (col: string) =>
+      /data|date|eta|etd|embarque|prazo|vencimento/i.test(col.normalize("NFD").replace(/[̀-ͯ]/g, ""));
+    const getSubH = (col: string) => {
+      const idx = intlColumns.indexOf(col);
+      return (intlSubHeaders[idx] ?? "").replace(/\r\n/g, " ").trim();
+    };
+    const isBRLC = (col: string) => getSubH(col).toLowerCase().includes("brl");
+    const isUSDC = (col: string) => {
+      const n = col.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const sub = getSubH(col).toLowerCase();
+      return /tarifa|frete|custo total|diferenca|diferença/.test(n) || sub.includes("usd") || col === "TAXAS - ORIGEM" || col === "TAXAS - DESTINO";
+    };
+    const isPctC = (col: string) => col.includes("%") || /aumento|percentual/i.test(col);
+    const fmtUSDX = (v: number) => `$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmtBRLX = (v: number) => `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmtEURX = (v: number) => `€ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const hRow = exportCols.map((col) => /^Col\d+$/.test(col) ? (getSubH(col) || col) : col);
+    const sRow = exportCols.map((col) => { if (/^Col\d+$/.test(col)) return ""; const s = getSubH(col); return s && s !== col ? s : ""; });
+    const hasSubRow = sRow.some((s) => s !== "");
+    const freightData = intlRowsFiltradas.map((row) =>
+      exportCols.map((col) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const v = (row as any)[col];
+        if (v === undefined || v === null || v === "") return "";
+        if (isDateColX(col)) return fmtDateX(v);
+        if (typeof v === "number") {
+          if (isPctC(col)) return `${Number(v).toFixed(1)}%`;
+          if (isBRLC(col)) return fmtBRLX(v);
+          if (isUSDC(col)) return fmtUSDX(v);
+          if (col === "VALOR P.O") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const moeda = String((row as any)["MOEDA P.O"] ?? "USD").toUpperCase().trim();
+            if (moeda === "EUR") return fmtEURX(v);
+            return fmtUSDX(v);
+          }
+        }
+        return v;
+      }),
+    );
+    const aoa: unknown[][] = [hRow];
+    if (hasSubRow) aoa.push(sRow);
+    aoa.push(...freightData);
+    const wsFreight = XLSX.utils.aoa_to_sheet(aoa);
+    wsFreight["!cols"] = exportCols.map((col) => {
+      const n = col.toLowerCase();
+      if (/agente|exportador|obs/.test(n))          return { wch: 22 };
+      if (/material|origem|destino/.test(n))        return { wch: 18 };
+      if (/modalidade|container|tipo/.test(n))      return { wch: 14 };
+      if (/data|date|revisao|incial|final/.test(n)) return { wch: 13 };
+      if (/tarifa|frete|custo|taxa|valor/.test(n))  return { wch: 16 };
+      if (/p\.o\.|\.o\.|^po$/.test(n))             return { wch: 13 };
+      if (/diferenca|diferença/.test(n))            return { wch: 14 };
+      return { wch: 11 };
+    });
+    XLSX.utils.book_append_sheet(wb, wsFreight, "Fretes Internacionais");
+
+    XLSX.writeFile(wb, `Relatorio_Internacionais_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // ── Export profissional: PDF ─────────────────────────────────────────────────
+  const downloadIntlPDF = () => {
+    if (intlRows.length === 0) return;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const today = new Date().toLocaleDateString("pt-BR");
+    const pageW = doc.internal.pageSize.getWidth();
+    const BLUE: [number, number, number] = [30, 64, 175];
+
+    const drawHeader = (title: string) => {
+      doc.setFillColor(...BLUE);
+      doc.rect(0, 0, pageW, 18, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, 10, 12);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+    };
+    const fmtUSDPdf = (v: number) => `$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    // ── Página 1: KPIs ────────────────────────────────────────────────────────
+    drawHeader("IMPORTCONTROL — Fretes Internacionais");
+    let curY = 26;
+    doc.setTextColor(...BLUE);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("Indicadores Gerais", 10, curY);
+    curY += 2;
+    autoTable(doc, {
+      startY: curY,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Containers 20ft", (intlTotals.cont20 || intlStats.containers["20ft"]).toLocaleString("pt-BR")],
+        ["Containers 40ft", (intlTotals.cont40 || intlStats.containers["40ft"]).toLocaleString("pt-BR")],
+        ["Containers 45ft", (intlTotals.cont45 || intlStats.containers["45ft"]).toLocaleString("pt-BR")],
+        ["Total de Containers", ((intlTotals.cont20 || intlStats.containers["20ft"]) + (intlTotals.cont40 || intlStats.containers["40ft"]) + (intlTotals.cont45 || intlStats.containers["45ft"])).toLocaleString("pt-BR")],
+        ["Modalidade LCL", intlStats.modalidades.LCL.toLocaleString("pt-BR")],
+        ["Modalidade FCL", intlStats.modalidades.FCL.toLocaleString("pt-BR")],
+        ["Modalidade Aéreo", (intlTotals.aereo || intlStats.modalidades.Aereo).toLocaleString("pt-BR")],
+        ["Total de Exportadores", intlStats.exportadores.length.toLocaleString("pt-BR")],
+        ["Total de Agentes", intlStats.agentes.length.toLocaleString("pt-BR")],
+        ["Registros Carregados", intlRows.length.toLocaleString("pt-BR")],
+        ["Registros Filtrados", intlRowsFiltradas.length.toLocaleString("pt-BR")],
+        ["Total de Meses", intlStats.meses.length.toLocaleString("pt-BR")],
+        ["Média de Containers/Mês", intlStats.mediaContainers.toFixed(1)],
+        ["Arquivo", intlFileName || "—"],
+      ],
+      headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 9 },
+      bodyStyles: { fontSize: 9 },
+      alternateRowStyles: { fillColor: [239, 246, 255] },
+      columnStyles: { 1: { halign: "right" } },
+      margin: { left: 10, right: 10 },
+    });
+
+    // ── Página 2: Detalhes por Mês ────────────────────────────────────────────
+    if (intlStats.detalhesPorMes.length > 0) {
+      doc.addPage();
+      drawHeader("Fretes Internacionais — Detalhes por Mês");
+      autoTable(doc, {
+        startY: 24,
+        head: [["Mês", "Containers", "Peso Total (kg)"]],
+        body: intlStats.detalhesPorMes.map((d) => [
+          d.mes,
+          d.containers.toLocaleString("pt-BR"),
+          Math.round(d.peso).toLocaleString("pt-BR"),
+        ]),
+        headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [239, 246, 255] },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+        margin: { left: 10, right: 10 },
+      });
+    }
+
+    // ── Página 3: Listagem resumida dos fretes filtrados ─────────────────────
+    if (intlRowsFiltradas.length > 0) {
+      doc.addPage();
+      const hasFilter = intlFilterTipos.length > 0 || !!intlFilterPO || intlFilterExps.length > 0 || intlFilterAgentes.length > 0 || intlFilterMeses.length > 0;
+      drawHeader(`Fretes Internacionais — Listagem${hasFilter ? " (Filtrada)" : ""}`);
+      const tableBody = intlRowsFiltradas.map((row) => {
+        const poColD = intlColumns[3] ? String(row[intlColumns[3]] ?? "") : "";
+        const po = poColD || (intlField.po ? String(row[intlField.po] ?? "") : "");
+        const exp = intlField.exportador ? String(row[intlField.exportador] ?? "") : "";
+        const agente = intlField.agente ? String(row[intlField.agente] ?? "") : "";
+        const cont = intlField.container ? String(row[intlField.container] ?? "") : "";
+        const valor = intlColumns[16] ? detectQty(row[intlColumns[16]]) : 0;
+        const frete = intlColumns[32] ? detectQty(row[intlColumns[32]]) : 0;
+        const pracoRaw = intlField.praco ? row[intlField.praco] : null;
+        const praco = pracoRaw ? (formatDate(pracoRaw) ?? String(pracoRaw)) : "";
+        return [
+          po || "—", exp || "—", agente || "—", cont || "—", praco || "—",
+          valor > 0 ? fmtUSDPdf(valor) : "—",
+          frete > 0 ? fmtUSDPdf(frete) : "—",
+        ];
+      });
+      autoTable(doc, {
+        startY: 24,
+        head: [["PO", "Exportador", "Agente", "Container/Modalidade", "Prazo", "Valor P.O (USD)", "Custo Frete (USD)"]],
+        body: tableBody,
+        headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 8 },
+        bodyStyles: { fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [239, 246, 255] },
+        columnStyles: {
+          0: { cellWidth: 24 }, 1: { cellWidth: 44 }, 2: { cellWidth: 36 },
+          3: { cellWidth: 36 }, 4: { cellWidth: 20 },
+          5: { halign: "right", cellWidth: 28 }, 6: { halign: "right", cellWidth: 28 },
+        },
+        margin: { left: 10, right: 10 },
+      });
+    }
+
+    doc.save(`Relatorio_Internacionais_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
 
   // Simulador
   const [tipoFrete, setTipoFrete] = useState("Marítimo");
@@ -1371,12 +1598,18 @@ const Embarques = () => {
                     </p>
                   </div>
                   {intlRows.length > 0 && (
-                    <div className="flex items-center gap-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="flex items-center gap-1 text-emerald-500 font-semibold">
-                        <CheckCircle2 className="h-4 w-4" /> {intlRows.length} registros carregados
+                        <CheckCircle2 className="h-4 w-4" /> {intlRows.length} registros
                       </span>
                       <Button size="sm" variant="outline" onClick={downloadIntlFrete}>
-                        <DownloadCloud className="h-4 w-4 mr-1" /> Baixar
+                        <DownloadCloud className="h-4 w-4 mr-1" /> Planilha
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={downloadIntlXLSX}>
+                        <FileSpreadsheet className="h-4 w-4 mr-1" /> Exportar Excel
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={downloadIntlPDF}>
+                        <FileDown className="h-4 w-4 mr-1" /> Exportar PDF
                       </Button>
                       <Button size="sm" variant="ghost" onClick={clearIntl} className="text-destructive hover:text-destructive">
                         <Trash2 className="h-4 w-4 mr-1" /> Limpar
