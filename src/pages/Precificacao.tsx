@@ -1057,6 +1057,30 @@ export default function Precificacao() {
                         </span>
                       </div>
                     )}
+                    {cotacaoCalc.fatorReal !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Fator real (Venda R$ ÷ Compra USD)</span>
+                        <span className={cn("font-bold", cotacaoCalc.fatorReal >= fatorNum ? "text-emerald-500" : "text-red-500")}>
+                          {cotacaoCalc.fatorReal.toFixed(2)}×
+                        </span>
+                      </div>
+                    )}
+                    {cotacaoCalc.vendaPorFator !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Venda p/ fator {fatorNum}× (R$/un)</span>
+                        <span className="font-semibold text-violet-600 dark:text-violet-400">
+                          {cotacaoCalc.vendaPorFator.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </span>
+                      </div>
+                    )}
+                    {cotacaoCalc.compraPorFator !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Compra p/ fator {fatorNum}× (USD/un)</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                          $ {cotacaoCalc.compraPorFator.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between col-span-2 border-t pt-1.5 mt-0.5">
                       <span className="text-muted-foreground font-medium">Lucro estimado (R$/un)</span>
                       <span className={cn("font-bold", cotacaoCalc.lucro > 0 ? "text-emerald-500" : "text-red-500")}>
