@@ -411,7 +411,7 @@ export default function Precificacao() {
 
   const removeItem = (id: string) => saveItems(vendaItems.filter((i) => i.id !== id));
 
-  const calcs   = vendaItems.map((item) => ({ item, c: calcVenda(item, margemNum) }));
+  const calcs   = vendaItems.map((item) => ({ item, c: calcVenda(item, margemNum, fatorNum) }));
   const totalCusto    = calcs.reduce((s, { c }) => s + c.custoTotalBRL, 0);
   const totalVendaMin = calcs.reduce((s, { c }) => s + c.vendaTotalMinBRL, 0);
 
