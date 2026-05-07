@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo, useRef, useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye } from "lucide-react";
+import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye, FileDown } from "lucide-react";
 import logoHci from "@/assets/logo-hci.jpeg";
 import logoFluxo from "@/assets/logo-fluxo.jpeg";
 import { usePedidos } from "@/hooks/usePedidos";
@@ -13,6 +13,7 @@ import { downloadDashboard } from "@/lib/downloadDashboard";
 import { downloadValvulasDashboard } from "@/lib/downloadValvulasDashboard";
 import { downloadTubosDashboard } from "@/lib/downloadTubosDashboard";
 import { downloadEmbarquesDashboard } from "@/lib/downloadEmbarquesDashboard";
+import { downloadPedidosXLSX, downloadPedidosPDF } from "@/lib/downloadPedidosReport";
 import { toast } from "sonner";
 import { DashboardErrorState, DashboardLoadingSkeleton } from "@/components/dashboard/DashboardStates";
 import { DashboardChartsSection, DashboardInsightsSection } from "@/components/dashboard/LazyDashboardSections";
@@ -245,6 +246,22 @@ const Index = () => {
                     >
                       <Download className="h-3.5 w-3.5" />
                       Baixar Excel
+                    </button>
+                    <button
+                      onClick={() => { if (!downloadPedidosXLSX(filteredData as any, activeCategory)) toast.info("Nenhum dado para exportar."); }}
+                      disabled={isUpdating || filteredData.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      Exportar Excel
+                    </button>
+                    <button
+                      onClick={() => { if (!downloadPedidosPDF(filteredData as any, activeCategory)) toast.info("Nenhum dado para exportar."); }}
+                      disabled={isUpdating || filteredData.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Exportar PDF
                     </button>
                     <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
                       <Upload className="h-3.5 w-3.5" />

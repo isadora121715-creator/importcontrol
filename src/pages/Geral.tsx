@@ -399,14 +399,19 @@ const Geral = () => {
 
     // Header bar
     doc.setFillColor(30, 64, 175);
-    doc.rect(0, 0, pageW, 18, "F");
+    doc.rect(0, 0, pageW, 20, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
+    doc.setFontSize(15);
     doc.setFont("helvetica", "bold");
-    doc.text("IMPORTCONTROL — Visão Geral Consolidada", 10, 12);
-    doc.setFontSize(9);
+    doc.text("HCI", 10, 13);
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.4);
+    doc.line(24, 4, 24, 16);
+    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+    doc.text("Visão Geral Consolidada — Importcontrol", 27, 13);
+    doc.setFontSize(8);
+    doc.text(`Gerado em: ${today}`, pageW - 10, 13, { align: "right" });
 
     let curY = 26;
     doc.setTextColor(30, 64, 175);
@@ -503,17 +508,22 @@ const Geral = () => {
       doc.addPage();
       // Header bar on new page
       doc.setFillColor(30, 64, 175);
-      doc.rect(0, 0, pageW, 18, "F");
+      doc.rect(0, 0, pageW, 20, "F");
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(12);
+      doc.setFontSize(15);
       doc.setFont("helvetica", "bold");
-      doc.text("Vendas vs Compras — Série Mensal", 10, 12);
-      doc.setFontSize(9);
+      doc.text("HCI", 10, 13);
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.4);
+      doc.line(24, 4, 24, 16);
+      doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+      doc.text("Vendas vs Compras — Série Mensal", 27, 13);
+      doc.setFontSize(8);
+      doc.text(`Gerado em: ${today}`, pageW - 10, 13, { align: "right" });
 
       autoTable(doc, {
-        startY: 24,
+        startY: 26,
         head: [["Mês", "Compras (R$)", "Vendas (R$)"]],
         body: stats.monthlySeries.map((v) => [v.mes, formatBRL2(v.Compras), formatBRL2(v.Vendas)]),
         headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold", fontSize: 9 },
@@ -528,19 +538,25 @@ const Geral = () => {
     if (report.length > 0) {
       doc.addPage();
       doc.setFillColor(30, 64, 175);
-      doc.rect(0, 0, pageW, 18, "F");
+      doc.rect(0, 0, pageW, 20, "F");
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(12);
+      doc.setFontSize(15);
       doc.setFont("helvetica", "bold");
+      doc.text("HCI", 10, 13);
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.4);
+      doc.line(24, 4, 24, 16);
       const dimLabel = reportDim === "mes" ? "Por Mês" : reportDim === "fornecedor" ? "Por Fornecedor" : reportDim === "cliente" ? "Por Cliente" : "Por PO";
-      doc.text(`Relatório por Dimensão — ${dimLabel}`, 10, 12);
-      doc.setFontSize(9);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Relatório por Dimensão — ${dimLabel}`, 27, 13);
+      doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
 
       const dimColLabel = reportDim === "mes" ? "Mês" : reportDim === "fornecedor" ? "Fornecedor" : reportDim === "cliente" ? "Cliente" : "PO";
       autoTable(doc, {
-        startY: 24,
+        startY: 26,
         head: [[dimColLabel, "Registros", "POs Únicas", "Valor Compra (USD)", "Valor Venda (R$)"]],
         body: report.map((r) => [
           r.chave,

@@ -963,14 +963,19 @@ const Embarques = () => {
 
     const drawHeader = (title: string) => {
       doc.setFillColor(...BLUE);
-      doc.rect(0, 0, pageW, 18, "F");
+      doc.rect(0, 0, pageW, 20, "F");
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(13);
+      doc.setFontSize(15);
       doc.setFont("helvetica", "bold");
-      doc.text(title, 10, 12);
-      doc.setFontSize(9);
+      doc.text("HCI", 10, 13);
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(0.4);
+      doc.line(24, 4, 24, 16);
+      doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(`Gerado em: ${today}`, pageW - 10, 12, { align: "right" });
+      doc.text(title, 27, 13);
+      doc.setFontSize(8);
+      doc.text(`Gerado em: ${today}`, pageW - 10, 13, { align: "right" });
     };
     const fmtUSDPdf = (v: number) => `$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -1013,7 +1018,7 @@ const Embarques = () => {
       doc.addPage();
       drawHeader("Fretes Internacionais — Detalhes por Mês");
       autoTable(doc, {
-        startY: 24,
+        startY: 26,
         head: [["Mês", "Containers", "Peso Total (kg)"]],
         body: intlStats.detalhesPorMes.map((d) => [
           d.mes,
@@ -1050,7 +1055,7 @@ const Embarques = () => {
         ];
       });
       autoTable(doc, {
-        startY: 24,
+        startY: 26,
         head: [["PO", "Exportador", "Agente", "Container/Modalidade", "Prazo", "Valor P.O (USD)", "Custo Frete (USD)"]],
         body: tableBody,
         headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 8 },

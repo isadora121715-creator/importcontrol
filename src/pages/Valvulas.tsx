@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useRef, useState, useEffect } from "react";
-import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye, ArrowLeft } from "lucide-react";
+import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye, ArrowLeft, FileDown } from "lucide-react";
 import { usePedidos } from "@/hooks/usePedidos";
 import { DashboardCards } from "@/components/DashboardCards";
 import { SupplierStatusTable } from "@/components/SupplierStatusTable";
@@ -7,6 +7,7 @@ import { DelayAlertTable } from "@/components/DelayAlertTable";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { downloadValvulasDashboard } from "@/lib/downloadValvulasDashboard";
+import { downloadPedidosXLSX, downloadPedidosPDF } from "@/lib/downloadPedidosReport";
 import { toast } from "sonner";
 import { DashboardErrorState, DashboardLoadingSkeleton } from "@/components/dashboard/DashboardStates";
 import { DashboardChartsSection, DashboardInsightsSection } from "@/components/dashboard/LazyDashboardSections";
@@ -232,6 +233,22 @@ const Valvulas = () => {
                     >
                       <Download className="h-3.5 w-3.5" />
                       Baixar Excel
+                    </button>
+                    <button
+                      onClick={() => { if (!downloadPedidosXLSX(filteredData as any, activeCategory)) toast.info("Nenhum dado para exportar."); }}
+                      disabled={isUpdating || filteredData.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      Exportar Excel
+                    </button>
+                    <button
+                      onClick={() => { if (!downloadPedidosPDF(filteredData as any, activeCategory)) toast.info("Nenhum dado para exportar."); }}
+                      disabled={isUpdating || filteredData.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Exportar PDF
                     </button>
                     <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
                       <Upload className="h-3.5 w-3.5" />
