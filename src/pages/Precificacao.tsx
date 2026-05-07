@@ -718,6 +718,20 @@ export default function Precificacao() {
                       $ {resultA.compraMaxUSD > 0 ? resultA.compraMaxUSD.toFixed(2) : "—"}
                     </span>
                   </div>
+                  {resultA.fatorReal !== null && (
+                    <div className="border-t pt-2 flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Fator real (Venda R$ ÷ Compra USD)</span>
+                      <span className={cn("font-bold", resultA.fatorReal >= fatorNum ? "text-emerald-500" : "text-red-500")}>
+                        {resultA.fatorReal.toFixed(2)}×
+                      </span>
+                    </div>
+                  )}
+                  {resultA.compraPorFator !== null && (
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-xs text-muted-foreground">Compra p/ fator {fatorNum}× (USD/un)</span>
+                      <span className="font-semibold text-blue-500">$ {resultA.compraPorFator.toFixed(2)}</span>
+                    </div>
+                  )}
                   <p className="text-[11px] text-muted-foreground text-center pt-1">
                     Lucro estimado: {resultA.lucro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · margem {resultA.mg}%
                   </p>
