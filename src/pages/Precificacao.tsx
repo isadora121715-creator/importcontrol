@@ -358,6 +358,8 @@ export default function Precificacao() {
   const { userId, displayName, authReady } = useCurrentUser();
   const [margem, setMargem] = useState("18");
   const margemNum = Number(margem) || 18;
+  const [fator, setFator] = useState("12");
+  const fatorNum = Number(fator) || 12;
 
   // ── Simulador de itens ──────────────────────────────────────────────
   const [vendaItems, setVendaItems] = useState<VendaItem[]>(() => {
