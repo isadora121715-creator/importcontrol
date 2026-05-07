@@ -98,7 +98,7 @@ function saveCotacoes(userId: string, items: CotacaoSalva[]) {
   localStorage.setItem(cotacoesKey(userId), JSON.stringify(items));
 }
 
-function calcVenda(item: VendaItem, margemPct: number) {
+function calcVenda(item: VendaItem, margemPct: number, fatorAlvo: number) {
   const qtd       = Number(item.qtd)           || 1;
   const compra    = Number(item.precoCompraUSD) || 0;
   const frete     = Number(item.freteUSD)       || 0;
@@ -111,8 +111,11 @@ function calcVenda(item: VendaItem, margemPct: number) {
   const vendaMinBRL  = custoUnitBRL / (1 - margemPct / 100);
   const margemReal   = vendaUser > 0 ? ((vendaUser - custoUnitBRL) / vendaUser) * 100 : null;
   const abaixoMinimo = vendaUser > 0 && vendaUser < vendaMinBRL;
+  // Fator = Preço Venda (R$) / Preço Compra (USD). Ex.: 584,56 / 48,71 ≈ 12
+  const fatorReal     = vendaUser > 0 && compra > 0 ? vendaUser / compra : null;
+  const vendaPorFator = compra > 0 && fatorAlvo > 0 ? compra * fatorAlvo : null;
 
-  return { qtd, custoUnitUSD, custoUnitBRL, custoTotalBRL: custoUnitBRL * qtd, vendaMinBRL, vendaTotalMinBRL: vendaMinBRL * qtd, margemReal, abaixoMinimo };
+  return { qtd, custoUnitUSD, custoUnitBRL, custoTotalBRL: custoUnitBRL * qtd, vendaMinBRL, vendaTotalMinBRL: vendaMinBRL * qtd, margemReal, abaixoMinimo, fatorReal, vendaPorFator };
 }
 
 function calcCotacao(
@@ -123,6 +126,7 @@ function calcCotacao(
   impostoPct: number,
   cambio: number,
   margem: number,
+  fatorAlvo: number,
 ) {
   const custoUnitUSD = precoCompraUSD + freteUSD / Math.max(qtd, 1);
   const custoUnitBRL = custoUnitUSD * cambio * (1 + impostoPct / 100);
@@ -130,7 +134,11 @@ function calcCotacao(
   const margemReal   = precoVendaBRL > 0 ? ((precoVendaBRL - custoUnitBRL) / precoVendaBRL) * 100 : null;
   const abaixoMinimo = precoVendaBRL > 0 && precoVendaBRL < vendaMinBRL;
   const lucro        = precoVendaBRL > 0 ? precoVendaBRL - custoUnitBRL : vendaMinBRL - custoUnitBRL;
-  return { custoUnitUSD, custoUnitBRL, vendaMinBRL, margemReal, abaixoMinimo, lucro };
+  // Fator: relação direta Venda(R$) ÷ Compra(USD). Ex.: 584,56 / 48,71 ≈ 12
+  const fatorReal     = precoVendaBRL > 0 && precoCompraUSD > 0 ? precoVendaBRL / precoCompraUSD : null;
+  const vendaPorFator = precoCompraUSD > 0 && fatorAlvo > 0 ? precoCompraUSD * fatorAlvo : null;
+  const compraPorFator = precoVendaBRL > 0 && fatorAlvo > 0 ? precoVendaBRL / fatorAlvo : null;
+  return { custoUnitUSD, custoUnitBRL, vendaMinBRL, margemReal, abaixoMinimo, lucro, fatorReal, vendaPorFator, compraPorFator };
 }
 
 // ─────────────────────────────────────────────
