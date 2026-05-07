@@ -450,8 +450,10 @@ export default function Precificacao() {
     if (!compra) return null;
     const custoBRL    = (compra + frete) * cambio * (1 + imposto / 100);
     const vendaMinBRL = custoBRL / (1 - mg / 100);
-    return { compra, custoBRL, vendaMinBRL, lucro: vendaMinBRL - custoBRL, mg };
-  }, [modoB_compra, modoB_cambio, modoB_frete, modoB_imposto, margemNum]);
+    const fatorReal     = compra > 0 ? vendaMinBRL / compra : null;
+    const vendaPorFator = fatorNum > 0 ? compra * fatorNum : null;
+    return { compra, custoBRL, vendaMinBRL, lucro: vendaMinBRL - custoBRL, mg, fatorReal, vendaPorFator };
+  }, [modoB_compra, modoB_cambio, modoB_frete, modoB_imposto, margemNum, fatorNum]);
 
   // ── Cotação por produto ─────────────────────────────────────────────
   const [searchQuery, setSearchQuery]     = useState("");
