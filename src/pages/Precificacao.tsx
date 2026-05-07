@@ -499,8 +499,8 @@ export default function Precificacao() {
     const imposto = Number(cotacaoForm.impostoPct)     || 0;
     const cambio  = Number(cotacaoForm.cambio)         || 5.20;
     if (!compra && !venda) return null;
-    return calcCotacao(compra, venda, qtd, frete, imposto, cambio, margemNum);
-  }, [cotacaoForm, margemNum]);
+    return calcCotacao(compra, venda, qtd, frete, imposto, cambio, margemNum, fatorNum);
+  }, [cotacaoForm, margemNum, fatorNum]);
 
   // ── Cotações salvas ─────────────────────────────────────────────────
   const [cotacoes, setCotacoes] = useState<CotacaoSalva[]>([]);
