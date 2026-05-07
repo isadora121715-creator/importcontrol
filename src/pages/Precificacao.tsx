@@ -98,7 +98,7 @@ function saveCotacoes(userId: string, items: CotacaoSalva[]) {
   localStorage.setItem(cotacoesKey(userId), JSON.stringify(items));
 }
 
-function calcVenda(item: VendaItem, margemPct: number) {
+function calcVenda(item: VendaItem, margemPct: number, fatorAlvo: number) {
   const qtd       = Number(item.qtd)           || 1;
   const compra    = Number(item.precoCompraUSD) || 0;
   const frete     = Number(item.freteUSD)       || 0;
@@ -111,8 +111,11 @@ function calcVenda(item: VendaItem, margemPct: number) {
   const vendaMinBRL  = custoUnitBRL / (1 - margemPct / 100);
   const margemReal   = vendaUser > 0 ? ((vendaUser - custoUnitBRL) / vendaUser) * 100 : null;
   const abaixoMinimo = vendaUser > 0 && vendaUser < vendaMinBRL;
+  // Fator = Preço Venda (R$) / Preço Compra (USD). Ex.: 584,56 / 48,71 ≈ 12
+  const fatorReal     = vendaUser > 0 && compra > 0 ? vendaUser / compra : null;
+  const vendaPorFator = compra > 0 && fatorAlvo > 0 ? compra * fatorAlvo : null;
 
-  return { qtd, custoUnitUSD, custoUnitBRL, custoTotalBRL: custoUnitBRL * qtd, vendaMinBRL, vendaTotalMinBRL: vendaMinBRL * qtd, margemReal, abaixoMinimo };
+  return { qtd, custoUnitUSD, custoUnitBRL, custoTotalBRL: custoUnitBRL * qtd, vendaMinBRL, vendaTotalMinBRL: vendaMinBRL * qtd, margemReal, abaixoMinimo, fatorReal, vendaPorFator };
 }
 
 function calcCotacao(
@@ -123,6 +126,7 @@ function calcCotacao(
   impostoPct: number,
   cambio: number,
   margem: number,
+  fatorAlvo: number,
 ) {
   const custoUnitUSD = precoCompraUSD + freteUSD / Math.max(qtd, 1);
   const custoUnitBRL = custoUnitUSD * cambio * (1 + impostoPct / 100);
@@ -130,7 +134,11 @@ function calcCotacao(
   const margemReal   = precoVendaBRL > 0 ? ((precoVendaBRL - custoUnitBRL) / precoVendaBRL) * 100 : null;
   const abaixoMinimo = precoVendaBRL > 0 && precoVendaBRL < vendaMinBRL;
   const lucro        = precoVendaBRL > 0 ? precoVendaBRL - custoUnitBRL : vendaMinBRL - custoUnitBRL;
-  return { custoUnitUSD, custoUnitBRL, vendaMinBRL, margemReal, abaixoMinimo, lucro };
+  // Fator: relação direta Venda(R$) ÷ Compra(USD). Ex.: 584,56 / 48,71 ≈ 12
+  const fatorReal     = precoVendaBRL > 0 && precoCompraUSD > 0 ? precoVendaBRL / precoCompraUSD : null;
+  const vendaPorFator = precoCompraUSD > 0 && fatorAlvo > 0 ? precoCompraUSD * fatorAlvo : null;
+  const compraPorFator = precoVendaBRL > 0 && fatorAlvo > 0 ? precoVendaBRL / fatorAlvo : null;
+  return { custoUnitUSD, custoUnitBRL, vendaMinBRL, margemReal, abaixoMinimo, lucro, fatorReal, vendaPorFator, compraPorFator };
 }
 
 // ─────────────────────────────────────────────
@@ -350,6 +358,8 @@ export default function Precificacao() {
   const { userId, displayName, authReady } = useCurrentUser();
   const [margem, setMargem] = useState("18");
   const margemNum = Number(margem) || 18;
+  const [fator, setFator] = useState("12");
+  const fatorNum = Number(fator) || 12;
 
   // ── Simulador de itens ──────────────────────────────────────────────
   const [vendaItems, setVendaItems] = useState<VendaItem[]>(() => {
@@ -401,7 +411,7 @@ export default function Precificacao() {
 
   const removeItem = (id: string) => saveItems(vendaItems.filter((i) => i.id !== id));
 
-  const calcs   = vendaItems.map((item) => ({ item, c: calcVenda(item, margemNum) }));
+  const calcs   = vendaItems.map((item) => ({ item, c: calcVenda(item, margemNum, fatorNum) }));
   const totalCusto    = calcs.reduce((s, { c }) => s + c.custoTotalBRL, 0);
   const totalVendaMin = calcs.reduce((s, { c }) => s + c.vendaTotalMinBRL, 0);
 
@@ -489,8 +499,8 @@ export default function Precificacao() {
     const imposto = Number(cotacaoForm.impostoPct)     || 0;
     const cambio  = Number(cotacaoForm.cambio)         || 5.20;
     if (!compra && !venda) return null;
-    return calcCotacao(compra, venda, qtd, frete, imposto, cambio, margemNum);
-  }, [cotacaoForm, margemNum]);
+    return calcCotacao(compra, venda, qtd, frete, imposto, cambio, margemNum, fatorNum);
+  }, [cotacaoForm, margemNum, fatorNum]);
 
   // ── Cotações salvas ─────────────────────────────────────────────────
   const [cotacoes, setCotacoes] = useState<CotacaoSalva[]>([]);
@@ -637,6 +647,20 @@ export default function Precificacao() {
               onChange={(e) => setMargem(e.target.value)}
             />
             <span className="text-sm font-bold text-primary">%</span>
+          </div>
+
+          {/* Fator alvo (Venda R$ ÷ Compra USD) */}
+          <div className="flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-2.5 shadow-sm">
+            <Calculator className="h-4 w-4 text-violet-500" />
+            <label className="text-sm font-medium whitespace-nowrap" title="Preço de Venda (R$) ÷ Preço de Compra (USD)">
+              Fator alvo
+            </label>
+            <Input
+              type="number" min="0.1" step="0.1" className="w-20 h-8 text-center font-bold"
+              value={fator}
+              onChange={(e) => setFator(e.target.value)}
+            />
+            <span className="text-sm font-bold text-violet-500">×</span>
           </div>
         </div>
 
@@ -1030,6 +1054,30 @@ export default function Precificacao() {
                         <span className={cn("font-bold", cotacaoCalc.margemReal >= margemNum ? "text-emerald-500" : "text-red-500")}>
                           {cotacaoCalc.margemReal.toFixed(1)}%
                           {cotacaoCalc.abaixoMinimo && " ⚠️"}
+                        </span>
+                      </div>
+                    )}
+                    {cotacaoCalc.fatorReal !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Fator real (Venda R$ ÷ Compra USD)</span>
+                        <span className={cn("font-bold", cotacaoCalc.fatorReal >= fatorNum ? "text-emerald-500" : "text-red-500")}>
+                          {cotacaoCalc.fatorReal.toFixed(2)}×
+                        </span>
+                      </div>
+                    )}
+                    {cotacaoCalc.vendaPorFator !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Venda p/ fator {fatorNum}× (R$/un)</span>
+                        <span className="font-semibold text-violet-600 dark:text-violet-400">
+                          {cotacaoCalc.vendaPorFator.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </span>
+                      </div>
+                    )}
+                    {cotacaoCalc.compraPorFator !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Compra p/ fator {fatorNum}× (USD/un)</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                          $ {cotacaoCalc.compraPorFator.toFixed(2)}
                         </span>
                       </div>
                     )}
