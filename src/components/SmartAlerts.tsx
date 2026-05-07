@@ -25,6 +25,7 @@ interface OrderData {
   po: string | null;
   chegadaHci: string | null;
   prazoCliente: string | null;
+  item: string | null;
   [key: string]: unknown;
 }
 
@@ -624,19 +625,34 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                 const poItems = data.filter((d) => d.po === activePo);
                 if (poItems.length === 0) return <p className="py-8 text-center text-sm text-muted-foreground">Nenhum item encontrado para esta PO</p>;
 
+                // Propaga preço de compra: se o mesmo código tem preço em alguma linha
+                // mas não em outras, preenche as linhas sem preço com o valor encontrado.
+                const priceByCode = new Map<string, number>();
+                poItems.forEach((d) => {
+                  if (d.codigo && d.precoCompra != null && d.precoCompra > 0) {
+                    if (!priceByCode.has(d.codigo)) priceByCode.set(d.codigo, d.precoCompra);
+                  }
+                });
+                const poItemsEnriched = poItems.map((d) => ({
+                  ...d,
+                  precoCompraEfetivo:
+                    d.precoCompra ?? (d.codigo ? (priceByCode.get(d.codigo) ?? null) : null),
+                }));
+
                 const downloadPoExcel = () => {
-                  const rows = poItems.map((d) => ({
+                  const rows = poItemsEnriched.map((d) => ({
+                    Item: d.item ?? "",
                     PI: d.pi ?? "",
                     Código: d.codigo ?? "",
                     Descrição: d.descricao ?? "",
                     "Status C/V": d.statusCompraVenda ?? "",
                     "Status Forn.": d.statusFornecedor ?? "",
-                    "Preço Compra": d.precoCompra ?? "",
+                    "Preço Compra": d.precoCompraEfetivo ?? "",
                     "Preço Venda": d.precoVenda ?? "",
                     Qty: d.qtyVenda ?? d.qtyCompra ?? "",
                     "Peso (kg)": itemWeights[`${d.pi}-${d.codigo}`] ?? "",
-                    ETD: d.etd ?? "",
-                    ETA: d.eta ?? "",
+                    ETD: (d as any).etd ?? "",
+                    ETA: (d as any).eta ?? "",
                     "Prazo Cliente": d.prazoCliente ?? "",
                     "Chegada HCI": d.chegadaHci ?? "",
                     Fornecedor: d.fornecedor ?? "",
@@ -644,15 +660,15 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                   }));
                   const ws = XLSX.utils.json_to_sheet(rows);
                   ws["!cols"] = [
-                    { wch: 8 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 },
+                    { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 14 },
                     { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 10 }, { wch: 12 },
                     { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 20 },
                   ];
 
                   // Aba 2: Margem Aérea da PO
                   const FATOR_NAC = 8;
-                  const margemRows = poItems.map((d) => {
-                    const precoForn = d.precoCompra ?? 0;
+                  const margemRows = poItemsEnriched.map((d) => {
+                    const precoForn = d.precoCompraEfetivo ?? 0;
                     const precoCliente = d.precoVenda ?? 0;
                     const itemKey = `${d.pi}-${d.codigo}`;
                     const peso = itemWeights[itemKey] ?? pesoKgValue;
@@ -666,8 +682,8 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                     const novoFator = itemComFrete > 0 ? precoCliente / itemComFrete : 0;
 
                     return {
-                      PI: d.pi ?? "",
                       Item: d.item ?? "",
+                      PI: d.pi ?? "",
                       Código: d.codigo ?? "",
                       Descrição: d.descricao ?? "",
                       Status: d.statusCompraVenda ?? "",
@@ -741,6 +757,7 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="text-xs">Item</TableHead>
                           <TableHead className="text-xs">PI</TableHead>
                           <TableHead className="text-xs">Código</TableHead>
                           <TableHead className="text-xs">Descrição</TableHead>
@@ -755,11 +772,12 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {poItems.map((d, i) => (
+                        {poItemsEnriched.map((d, i) => (
                           <TableRow key={i} className={
                             d.statusCompraVenda === "Crítico" ? "bg-status-critico/5" :
                             d.statusCompraVenda === "Atrasado" ? "bg-status-atrasado/5" : ""
                           }>
+                            <TableCell className="font-mono text-xs font-semibold text-primary">{d.item || "—"}</TableCell>
                             <TableCell className="font-mono text-xs">{d.pi || "—"}</TableCell>
                             <TableCell className="font-mono text-xs">{d.codigo || "—"}</TableCell>
                             <TableCell className="text-xs max-w-[200px] truncate">{d.descricao || "—"}</TableCell>
@@ -778,7 +796,9 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                                 "bg-muted text-muted-foreground"
                               }`}>{d.statusFornecedor || "—"}</span>
                             </TableCell>
-                            <TableCell className="text-xs font-mono text-right">{formatUSD(d.precoCompra)}</TableCell>
+                            <TableCell className={`text-xs font-mono text-right ${d.precoCompraEfetivo !== d.precoCompra ? "text-muted-foreground italic" : ""}`}>
+                              {formatUSD(d.precoCompraEfetivo)}
+                            </TableCell>
                             <TableCell className="text-xs font-mono text-right">{formatBRL(d.precoVenda)}</TableCell>
                             <TableCell className="text-xs font-mono text-right">{d.qtyVenda ?? d.qtyCompra ?? "—"}</TableCell>
                             <TableCell className="text-xs text-right">
