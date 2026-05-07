@@ -39,20 +39,133 @@ function itemToRow(i: CatalogoItem) {
   };
 }
 
-// ── leitura ───────────────────────────────────────────────────────────────────
+// ── leitura paginada de catalogo_materiais ────────────────────────────────────
 export async function readCatalogo(): Promise<CatalogoItem[]> {
+  const PAGE = 1000;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("catalogo_materiais")
-    .select("*")
-    .order("ultima_atualizacao", { ascending: false });
+  const all: any[] = [];
 
-  if (error) {
-    console.error("readCatalogo error:", error);
-    return [];
+  for (let from = 0; ; from += PAGE) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from("catalogo_materiais")
+      .select("*")
+      .order("ultima_atualizacao", { ascending: false })
+      .range(from, from + PAGE - 1);
+
+    if (error) {
+      console.error("readCatalogo error:", error);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
   }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ((data ?? []) as any[]).map(rowToItem);
+  return (all as any[]).map(rowToItem);
+}
+
+// ── leitura paginada de pedidos (para catálogo ao vivo) ───────────────────────
+async function fetchPedidosForCatalog(): Promise<
+  Array<{
+    codigo: string | null;
+    descricao: string | null;
+    preco_compra: number | null;
+    preco_venda: number | null;
+    fornecedor: string | null;
+    categoria: string;
+  }>
+> {
+  const PAGE = 500;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const all: any[] = [];
+
+  for (let from = 0; ; from += PAGE) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from("pedidos")
+      .select("codigo,descricao,preco_compra,preco_venda,fornecedor,categoria")
+      .in("categoria", ["Conexões", "Tubos", "Válvulas"])
+      .range(from, from + PAGE - 1);
+
+    if (error) { console.error("fetchPedidosForCatalog error:", error); break; }
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+  }
+
+  return all;
+}
+
+/**
+ * Constrói o catálogo ao vivo:
+ * 1. Lê todos os pedidos (Conexões/Tubos/Válvulas) e agrega por chave.
+ * 2. Mescla com itens manuais de catalogo_materiais (preço manual tem prioridade).
+ * Isso garante que TODOS os itens dos pedidos apareçam no catálogo, mesmo que
+ * syncCatalogo não tenha sido chamado ainda.
+ */
+export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
+  const [pedidosRows, manualItems] = await Promise.all([
+    fetchPedidosForCatalog(),
+    readCatalogo(),
+  ]);
+
+  const now = new Date().toISOString();
+  const byKey = new Map<string, CatalogoItem>();
+
+  // Primeira passagem: agrupa pedidos por chave
+  for (const row of pedidosRows) {
+    const codigo    = (row.codigo    ?? "").trim();
+    const descricao = (row.descricao ?? "").trim();
+    if (!codigo && !descricao) continue;
+
+    const key       = makeKey(codigo, descricao);
+    const fornecedor = (row.fornecedor ?? "").trim();
+    const categoria  = (row.categoria  ?? "");
+    const preco: number | null =
+      row.preco_compra != null ? Number(row.preco_compra)
+      : row.preco_venda != null ? Number(row.preco_venda)
+      : null;
+
+    if (byKey.has(key)) {
+      const item = byKey.get(key)!;
+      if (fornecedor && !item.fornecedores.includes(fornecedor)) item.fornecedores.push(fornecedor);
+      if (categoria  && !item.categorias.includes(categoria))   item.categorias.push(categoria);
+      if (preco !== null && item.precoCompra === null)           item.precoCompra = preco;
+    } else {
+      byKey.set(key, {
+        id:                key,
+        codigo,
+        descricao,
+        precoCompra:       preco,
+        fornecedores:      fornecedor ? [fornecedor] : [],
+        categorias:        categoria  ? [categoria]  : [],
+        ultimaAtualizacao: now,
+      });
+    }
+  }
+
+  // Segunda passagem: mescla itens manuais de catalogo_materiais
+  for (const item of manualItems) {
+    if (byKey.has(item.id)) {
+      const existing = byKey.get(item.id)!;
+      // Preço manual tem prioridade
+      if (item.precoCompra !== null) existing.precoCompra = item.precoCompra;
+      for (const f of item.fornecedores) {
+        if (!existing.fornecedores.includes(f)) existing.fornecedores.push(f);
+      }
+      for (const c of item.categorias) {
+        if (!existing.categorias.includes(c)) existing.categorias.push(c);
+      }
+      existing.ultimaAtualizacao = item.ultimaAtualizacao;
+    } else {
+      // Item adicionado manualmente (não vem de pedidos)
+      byKey.set(item.id, item);
+    }
+  }
+
+  return Array.from(byKey.values());
 }
 
 // ── upsert (adicionar ou atualizar itens) ─────────────────────────────────────

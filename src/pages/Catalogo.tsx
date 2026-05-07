@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Search, Plus, Trash2, Download, RefreshCw, Loader2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import {
-  readCatalogo,
+  readCatalogoComPedidos,
   upsertCatalogoItems,
   deleteCatalogoItem,
   type CatalogoItem,
@@ -260,11 +260,11 @@ export default function Catalogo() {
   // ── dados do Supabase (fallback no JSON estático quando vazio) ────────────
   const { data: rawCatalog, isLoading, isFetching, dataUpdatedAt } = useQuery({
     queryKey: ["catalogo"],
-    queryFn:  readCatalogo,
+    queryFn:  readCatalogoComPedidos,
     staleTime: 0,
     gcTime:    10 * 60_000,
     refetchOnMount: "always",
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const catalog: CatalogoItem[] =
