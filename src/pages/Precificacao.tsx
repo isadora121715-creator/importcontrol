@@ -431,7 +431,9 @@ export default function Precificacao() {
     const custoMaxBRL  = venda * (1 - mg / 100);
     const custoMaxUSD  = custoMaxBRL / (cambio * (1 + imposto / 100));
     const compraMaxUSD = custoMaxUSD - frete;
-    return { venda, custoMaxBRL, custoMaxUSD, compraMaxUSD, lucro: venda - custoMaxBRL, mg };
+    const fatorReal     = compraMaxUSD > 0 ? venda / compraMaxUSD : null;
+    const compraPorFator = fatorNum > 0 ? venda / fatorNum : null;
+    return { venda, custoMaxBRL, custoMaxUSD, compraMaxUSD, lucro: venda - custoMaxBRL, mg, fatorReal, compraPorFator };
   }, [modoA_venda, modoA_cambio, modoA_frete, modoA_imposto, margemNum]);
 
   const [modoB_compra,  setModoB_compra]  = useState("");
