@@ -1,6 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import staticCatalogo from "@/data/catalogo-static.json";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import logoHci from "@/assets/logo-hci.jpeg";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HeaderTabs } from "@/components/HeaderTabs";
 import { Input } from "@/components/ui/input";
@@ -22,7 +25,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Trash2, Download, RefreshCw, Loader2 } from "lucide-react";
+import { Search, Plus, Trash2, Download, RefreshCw, Loader2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   readCatalogo,
@@ -31,94 +34,18 @@ import {
   type CatalogoItem,
 } from "@/lib/syncCatalogo";
 
-// ---------- helpers ----------
+// ── helpers ──────────────────────────────────────────────────────────────────
 function fmtPreco(val: number | null): string {
   if (val === null) return "—";
-  return val.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  });
+  return `$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function exportExcel(items: CatalogoItem[]) {
-  const headerRow = [
-    "Código",
-    "Descrição",
-    "Preço Compra (USD)",
-    "Fornecedores",
-    "Categorias",
-    "Última Atualização",
-  ];
-
-  const dataRows = items.map((i) => [
-    i.codigo || "",
-    i.descricao || "",
-    i.precoCompra ?? "",
-    i.fornecedores.join("\n") || "",
-    i.categorias.join("\n") || "",
-    i.ultimaAtualizacao
-      ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR")
-      : "",
-  ]);
-
-  const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
-
-  ws["!cols"] = [
-    { wch: 18 },
-    { wch: 52 },
-    { wch: 20 },
-    { wch: 30 },
-    { wch: 18 },
-    { wch: 20 },
-  ];
-
-  const rowHeights: XLSX.RowInfo[] = [{ hpt: 28 }];
-  dataRows.forEach((row) => {
-    const maxLines = Math.max(
-      String(row[3]).split("\n").length,
-      String(row[4]).split("\n").length,
-      1,
-    );
-    rowHeights.push({ hpt: Math.max(18, maxLines * 16) });
-  });
-  ws["!rows"] = rowHeights;
-
-  const totalCols = headerRow.length;
-  for (let c = 0; c < totalCols; c++) {
-    const addr = XLSX.utils.encode_cell({ r: 0, c });
-    if (!ws[addr]) continue;
-    ws[addr].s = {
-      font:      { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
-      fill:      { fgColor: { rgb: "1E3A5F" } },
-      alignment: { horizontal: "center", vertical: "center", wrapText: true },
-      border:    { bottom: { style: "thin", color: { rgb: "AAAAAA" } } },
-    };
-  }
-
-  for (let r = 1; r <= dataRows.length; r++) {
-    const bgRgb = r % 2 === 0 ? "F3F6FB" : "FFFFFF";
-    for (let c = 0; c < totalCols; c++) {
-      const addr = XLSX.utils.encode_cell({ r, c });
-      if (!ws[addr]) ws[addr] = { t: "z", v: "" };
-      const isPrice = c === 2;
-      ws[addr].s = {
-        font:      { sz: 10 },
-        fill:      { fgColor: { rgb: bgRgb } },
-        alignment: { horizontal: isPrice ? "right" : "left", vertical: "center", wrapText: true },
-        border:    { bottom: { style: "hair", color: { rgb: "DDDDDD" } } },
-      };
-      if (isPrice && typeof ws[addr].v === "number") ws[addr].z = '#,##0.00 "USD"';
-    }
-  }
-
-  ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activeCell: "A2" };
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Catálogo");
-  const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `catalogo_materiais_${date}.xlsx`);
+function makeKey(codigo: string, descricao: string): string {
+  if (codigo) return codigo.trim().toUpperCase();
+  return descricao.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 60);
 }
+
+const CATEGORY_ORDER = ["Conexões", "Tubos", "Válvulas"];
 
 const CATEGORIA_COLORS: Record<string, string> = {
   "Conexões": "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
@@ -134,45 +61,238 @@ function emptyItem(): Omit<CatalogoItem, "id" | "ultimaAtualizacao"> {
   return { codigo: "", descricao: "", precoCompra: null, fornecedores: [], categorias: [] };
 }
 
-function makeKey(codigo: string, descricao: string): string {
-  if (codigo) return codigo.trim().toUpperCase();
-  return descricao.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 60);
+// ── load image as base64 for jsPDF ───────────────────────────────────────────
+async function imgToBase64(src: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(""); return; }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/jpeg"));
+    };
+    img.onerror = () => resolve("");
+    img.src = src;
+  });
 }
 
+// ── Excel export (one sheet per category + "Todos") ──────────────────────────
+function exportExcel(items: CatalogoItem[]) {
+  const wb = XLSX.utils.book_new();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const HEADER = ["Código", "Descrição", "Preço Compra (USD)", "Fornecedores", "Categorias", "Última Atualização"];
+  const colWidths = [{ wch: 18 }, { wch: 52 }, { wch: 20 }, { wch: 32 }, { wch: 18 }, { wch: 20 }];
+
+  const toRows = (list: CatalogoItem[]) =>
+    list.map((i) => [
+      i.codigo || "",
+      i.descricao || "",
+      i.precoCompra ?? "",
+      i.fornecedores.join(", ") || "",
+      i.categorias.join(", ") || "",
+      i.ultimaAtualizacao ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR") : "",
+    ]);
+
+  const addSheet = (name: string, list: CatalogoItem[]) => {
+    const ws = XLSX.utils.aoa_to_sheet([HEADER, ...toRows(list)]);
+    ws["!cols"] = colWidths;
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+
+  // Aba "Todos"
+  addSheet("Todos", items);
+
+  // Uma aba por categoria (na ordem padrão + eventuais categorias extras)
+  const allCats = CATEGORY_ORDER.concat(
+    Array.from(new Set(items.flatMap((i) => i.categorias))).filter(
+      (c) => !CATEGORY_ORDER.includes(c),
+    ),
+  );
+  for (const cat of allCats) {
+    const catItems = items.filter((i) => i.categorias.includes(cat));
+    if (catItems.length > 0) addSheet(cat, catItems);
+  }
+
+  XLSX.writeFile(wb, `catalogo_materiais_${today}.xlsx`);
+}
+
+// ── PDF export ────────────────────────────────────────────────────────────────
+async function exportPDF(items: CatalogoItem[]) {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const today = new Date().toLocaleDateString("pt-BR");
+  const BLUE: [number, number, number] = [30, 64, 175];
+  const BLUE_LIGHT: [number, number, number] = [239, 246, 255];
+
+  // Pre-load logo
+  const logoB64 = await imgToBase64(logoHci);
+
+  let firstPage = true;
+
+  const drawHeader = (subtitle: string) => {
+    doc.setFillColor(...BLUE);
+    doc.rect(0, 0, pageW, 22, "F");
+
+    // Logo HCI (image)
+    if (logoB64) {
+      try {
+        doc.addImage(logoB64, "JPEG", 6, 3, 16, 16);
+      } catch {
+        // fallback: text
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text("HCI", 10, 14);
+      }
+    } else {
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("HCI", 10, 14);
+    }
+
+    // Divider
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.4);
+    doc.line(26, 4, 26, 18);
+
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Catálogo de Materiais — HCI", 29, 11);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(subtitle, 29, 17);
+
+    // Date
+    doc.setFontSize(8);
+    doc.text(`Gerado em: ${today}`, pageW - 8, 14, { align: "right" });
+  };
+
+  const drawFooter = (pageNum: number) => {
+    const pageH = doc.internal.pageSize.getHeight();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.text(
+      `HCI Importcontrol — Catálogo de Materiais — ${today}  |  Pág. ${pageNum}`,
+      pageW / 2,
+      pageH - 4,
+      { align: "center" },
+    );
+  };
+
+  let pageCounter = 1;
+
+  // Group items by category
+  const allCats = CATEGORY_ORDER.concat(
+    Array.from(new Set(items.flatMap((i) => i.categorias))).filter(
+      (c) => !CATEGORY_ORDER.includes(c),
+    ),
+  );
+
+  for (const cat of allCats) {
+    const catItems = items.filter((i) => i.categorias.includes(cat));
+    if (catItems.length === 0) continue;
+
+    if (!firstPage) {
+      doc.addPage();
+      pageCounter++;
+    }
+    firstPage = false;
+
+    drawHeader(cat);
+
+    const tableBody = catItems.map((i) => [
+      i.codigo || "—",
+      i.descricao || "—",
+      fmtPreco(i.precoCompra),
+      i.fornecedores.join("\n") || "—",
+      new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR"),
+    ]);
+
+    autoTable(doc, {
+      startY: 26,
+      head: [["Código", "Descrição", "Preço Compra (USD)", "Fornecedores", "Atualização"]],
+      body: tableBody,
+      headStyles: {
+        fillColor: BLUE,
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      bodyStyles: { fontSize: 7.5 },
+      alternateRowStyles: { fillColor: BLUE_LIGHT },
+      columnStyles: {
+        0: { cellWidth: 26 },
+        1: { cellWidth: 110 },
+        2: { cellWidth: 32, halign: "right" },
+        3: { cellWidth: 60 },
+        4: { cellWidth: 26, halign: "center" },
+      },
+      margin: { left: 8, right: 8 },
+      didDrawPage: (data) => {
+        if (data.pageNumber > 1) {
+          pageCounter++;
+          drawHeader(cat);
+        }
+        drawFooter(pageCounter);
+      },
+    });
+  }
+
+  doc.save(`catalogo_hci_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// COMPONENT
+// ═════════════════════════════════════════════════════════════════════════════
 export default function Catalogo() {
   const queryClient = useQueryClient();
+  const isRefetchingRef = useRef(false);
 
-  // ── dados do Supabase (fallback no JSON estático quando vazio) ───────────
-  const { data: rawCatalog, isLoading, refetch } = useQuery({
+  // ── dados do Supabase (fallback no JSON estático quando vazio) ────────────
+  const { data: rawCatalog, isLoading, isFetching, dataUpdatedAt } = useQuery({
     queryKey: ["catalogo"],
     queryFn:  readCatalogo,
-    staleTime: 0,              // always consider stale — re-fetch on every mount
+    staleTime: 0,
     gcTime:    10 * 60_000,
-    refetchOnMount: "always",  // fetch fresh every time the page is opened
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
-  // Supabase tem prioridade; se retornar vazio usa os dados embutidos no app
+
   const catalog: CatalogoItem[] =
     rawCatalog && rawCatalog.length > 0
       ? rawCatalog
       : (staticCatalogo as unknown as CatalogoItem[]);
 
+  // ── filters ───────────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [filterCat, setFilterCat] = useState<string>("Todas");
+  const [activeTab, setActiveTab] = useState<string>("Todas");
 
-  // dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editItem, setEditItem] = useState<CatalogoItem | null>(null);
-  const [form, setForm] = useState(emptyItem());
+  // ── dialog state ──────────────────────────────────────────────────────────
+  const [dialogOpen, setDialogOpen]       = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [editItem, setEditItem]           = useState<CatalogoItem | null>(null);
+  const [form, setForm]                   = useState(emptyItem());
   const [formFornecedor, setFormFornecedor] = useState("");
-  const [formCategoria, setFormCategoria] = useState("");
+  const [formCategoria, setFormCategoria]   = useState("");
+  const [pdfExporting, setPdfExporting]     = useState(false);
 
-  // derived
+  // ── derived data ──────────────────────────────────────────────────────────
   const categories = useMemo(() => {
-    const s = new Set<string>();
-    catalog.forEach((i) => i.categorias.forEach((c) => s.add(c)));
-    return Array.from(s).sort();
+    const fromData = new Set<string>();
+    catalog.forEach((i) => i.categorias.forEach((c) => fromData.add(c)));
+    // Keep canonical order
+    return CATEGORY_ORDER.filter((c) => fromData.has(c)).concat(
+      Array.from(fromData).filter((c) => !CATEGORY_ORDER.includes(c)).sort(),
+    );
   }, [catalog]);
 
   const filtered = useMemo(() => {
@@ -183,12 +303,32 @@ export default function Catalogo() {
         i.codigo.toLowerCase().includes(q) ||
         i.descricao.toLowerCase().includes(q) ||
         i.fornecedores.some((f) => f.toLowerCase().includes(q));
-      const matchCat = filterCat === "Todas" || i.categorias.includes(filterCat);
+      const matchCat = activeTab === "Todas" || i.categorias.includes(activeTab);
       return matchSearch && matchCat;
     });
-  }, [catalog, search, filterCat]);
+  }, [catalog, search, activeTab]);
 
-  // ---------- dialog helpers ----------
+  // Items per category for stat badges
+  const countByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    catalog.forEach((i) => i.categorias.forEach((c) => { map[c] = (map[c] ?? 0) + 1; }));
+    return map;
+  }, [catalog]);
+
+  // ── reload ────────────────────────────────────────────────────────────────
+  const handleReload = async () => {
+    if (isRefetchingRef.current) return;
+    isRefetchingRef.current = true;
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["catalogo"] });
+      await queryClient.refetchQueries({ queryKey: ["catalogo"] });
+      toast.success("Catálogo recarregado com sucesso.");
+    } finally {
+      isRefetchingRef.current = false;
+    }
+  };
+
+  // ── dialog helpers ────────────────────────────────────────────────────────
   function openAdd() {
     setEditItem(null);
     setForm(emptyItem());
@@ -253,6 +393,7 @@ export default function Catalogo() {
       };
       await upsertCatalogoItems([item]);
       await queryClient.invalidateQueries({ queryKey: ["catalogo"] });
+      await queryClient.refetchQueries({ queryKey: ["catalogo"] });
       setDialogOpen(false);
       toast.success(editItem ? "Item atualizado." : "Item adicionado.");
     } catch (e) {
@@ -266,32 +407,73 @@ export default function Catalogo() {
   async function handleDeleteItem(id: string) {
     await deleteCatalogoItem(id);
     await queryClient.invalidateQueries({ queryKey: ["catalogo"] });
+    await queryClient.refetchQueries({ queryKey: ["catalogo"] });
     toast.success("Item removido.");
   }
 
-  // ---------- render ----------
+  const handleExportPDF = async () => {
+    if (filtered.length === 0) { toast.info("Nenhum item para exportar."); return; }
+    setPdfExporting(true);
+    try {
+      await exportPDF(filtered);
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao gerar PDF.");
+    } finally {
+      setPdfExporting(false);
+    }
+  };
+
+  // ── render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
       <HeaderTabs />
 
       <main className="mx-auto max-w-[1600px] px-6 py-6 space-y-6">
-        {/* Header row */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+
+        {/* ── Header row ─────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-bold">Catálogo de Materiais</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
               {catalog.length} {catalog.length === 1 ? "item" : "itens"} —
               sincronizado automaticamente ao importar Conexões, Válvulas e Tubos
+              {dataUpdatedAt > 0 && (
+                <span className="ml-2 opacity-70">
+                  · atualizado às {new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReload}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />
               Recarregar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportExcel(filtered)} disabled={filtered.length === 0}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportExcel(filtered)}
+              disabled={filtered.length === 0}
+            >
               <Download className="h-4 w-4 mr-1" />
               Exportar Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={filtered.length === 0 || pdfExporting}
+            >
+              {pdfExporting
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <FileDown className="h-4 w-4 mr-1" />}
+              Exportar PDF
             </Button>
             <Button size="sm" onClick={openAdd}>
               <Plus className="h-4 w-4 mr-1" />
@@ -300,7 +482,7 @@ export default function Catalogo() {
           </div>
         </div>
 
-        {/* KPI cards */}
+        {/* ── KPI cards ──────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-lg border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Total de Itens</p>
@@ -308,9 +490,7 @@ export default function Catalogo() {
           </div>
           <div className="rounded-lg border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Com Preço</p>
-            <p className="text-2xl font-bold mt-1">
-              {catalog.filter((i) => i.precoCompra !== null).length}
-            </p>
+            <p className="text-2xl font-bold mt-1">{catalog.filter((i) => i.precoCompra !== null).length}</p>
           </div>
           <div className="rounded-lg border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Fornecedores Únicos</p>
@@ -324,7 +504,7 @@ export default function Catalogo() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* ── Search + Category tabs ──────────────────────────────────────── */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -339,20 +519,29 @@ export default function Catalogo() {
             {["Todas", ...categories].map((c) => (
               <button
                 key={c}
-                onClick={() => setFilterCat(c)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                  filterCat === c
+                onClick={() => setActiveTab(c)}
+                className={`relative px-3 py-1 rounded-full text-xs font-semibold transition-colors border ${
+                  activeTab === c
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-muted text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
                 {c}
+                {c !== "Todas" && countByCategory[c] != null && (
+                  <span
+                    className={`ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 ${
+                      activeTab === c ? "bg-white/25 text-white" : "bg-background text-muted-foreground"
+                    }`}
+                  >
+                    {countByCategory[c]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Loading */}
+        {/* ── Loading ─────────────────────────────────────────────────────── */}
         {isLoading && (
           <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -360,90 +549,47 @@ export default function Catalogo() {
           </div>
         )}
 
-        {/* Table */}
-        {!isLoading && (
-          <div className="rounded-lg border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="w-32">Código</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="w-36 text-right">Preço Compra</TableHead>
-                  <TableHead>Fornecedores</TableHead>
-                  <TableHead>Categorias</TableHead>
-                  <TableHead className="w-36">Última Atualização</TableHead>
-                  <TableHead className="w-16" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                      {catalog.length === 0
-                        ? "Nenhum item ainda. Importe uma planilha de Conexões, Válvulas ou Tubos para popular o catálogo."
-                        : "Nenhum resultado para a busca atual."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((item) => (
-                    <TableRow
-                      key={item.id}
-                      className="cursor-pointer hover:bg-muted/40"
-                      onClick={() => openEdit(item)}
-                    >
-                      <TableCell className="font-mono text-xs font-medium">
-                        {item.codigo || <span className="text-muted-foreground italic">—</span>}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate" title={item.descricao}>
-                        {item.descricao || <span className="text-muted-foreground italic">—</span>}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums font-medium">
-                        {fmtPreco(item.precoCompra)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {item.fornecedores.length === 0 ? (
-                            <span className="text-muted-foreground text-xs italic">—</span>
-                          ) : (
-                            item.fornecedores.map((f) => (
-                              <Badge key={f} variant="secondary" className="text-xs">
-                                {f}
-                              </Badge>
-                            ))
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {item.categorias.map((c) => (
-                            <span
-                              key={c}
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catColor(c)}`}
-                            >
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Date(item.ultimaAtualizacao).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteItem(item.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+        {/* ── Content: if "Todas" show per-category sections, else single table */}
+        {!isLoading && activeTab === "Todas" && !search && (
+          <div className="space-y-8">
+            {categories.length === 0 ? (
+              <EmptyState />
+            ) : (
+              categories.map((cat) => {
+                const catItems = catalog.filter((i) => i.categorias.includes(cat));
+                if (catItems.length === 0) return null;
+                return (
+                  <CategorySection
+                    key={cat}
+                    cat={cat}
+                    items={catItems}
+                    onEdit={openEdit}
+                    onDelete={handleDeleteItem}
+                  />
+                );
+              })
+            )}
           </div>
+        )}
+
+        {!isLoading && (activeTab !== "Todas" || !!search) && (
+          <>
+            {activeTab !== "Todas" && (
+              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold ${catColor(activeTab)}`}>
+                {activeTab} — {filtered.length} {filtered.length === 1 ? "item" : "itens"}
+              </div>
+            )}
+            <CatalogTable
+              items={filtered}
+              onEdit={openEdit}
+              onDelete={handleDeleteItem}
+              emptyMessage={
+                catalog.length === 0
+                  ? "Nenhum item ainda. Importe uma planilha de Conexões, Válvulas ou Tubos para popular o catálogo."
+                  : "Nenhum resultado para a busca atual."
+              }
+            />
+          </>
         )}
 
         {filtered.length > 0 && !isLoading && (
@@ -453,7 +599,7 @@ export default function Catalogo() {
         )}
       </main>
 
-      {/* Add / Edit Dialog */}
+      {/* ── Add / Edit Dialog ──────────────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -497,7 +643,6 @@ export default function Catalogo() {
               />
             </div>
 
-            {/* Fornecedores */}
             <div className="space-y-2">
               <Label>Fornecedores</Label>
               <div className="flex gap-2">
@@ -526,7 +671,6 @@ export default function Catalogo() {
               </div>
             </div>
 
-            {/* Categorias */}
             <div className="space-y-2">
               <Label>Categorias</Label>
               <div className="flex gap-2">
@@ -566,6 +710,161 @@ export default function Catalogo() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+function CategorySection({
+  cat,
+  items,
+  onEdit,
+  onDelete,
+}: {
+  cat: string;
+  items: CatalogoItem[];
+  onEdit: (item: CatalogoItem) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="rounded-xl border overflow-hidden">
+      {/* Section header */}
+      <button
+        className={`w-full flex items-center justify-between px-4 py-3 text-left font-semibold text-sm transition-colors hover:bg-muted/40 ${catColor(cat)} border-b`}
+        onClick={() => setCollapsed((v) => !v)}
+      >
+        <span className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${catColor(cat)}`}
+          >
+            {cat}
+          </span>
+          <span className="text-muted-foreground font-normal">
+            {items.length} {items.length === 1 ? "item" : "itens"}
+          </span>
+        </span>
+        <span className="text-muted-foreground text-xs">{collapsed ? "▼ Expandir" : "▲ Recolher"}</span>
+      </button>
+
+      {!collapsed && (
+        <CatalogTable
+          items={items}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          emptyMessage="Nenhum item nesta categoria."
+          compact
+        />
+      )}
+    </div>
+  );
+}
+
+function CatalogTable({
+  items,
+  onEdit,
+  onDelete,
+  emptyMessage,
+  compact = false,
+}: {
+  items: CatalogoItem[];
+  onEdit: (item: CatalogoItem) => void;
+  onDelete: (id: string) => void;
+  emptyMessage: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`${compact ? "" : "rounded-lg border overflow-hidden"}`}>
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/50">
+            <TableHead className="w-32">Código</TableHead>
+            <TableHead>Descrição</TableHead>
+            <TableHead className="w-36 text-right">Preço Compra</TableHead>
+            <TableHead>Fornecedores</TableHead>
+            <TableHead>Categorias</TableHead>
+            <TableHead className="w-32">Atualização</TableHead>
+            <TableHead className="w-12" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                {emptyMessage}
+              </TableCell>
+            </TableRow>
+          ) : (
+            items.map((item) => (
+              <TableRow
+                key={item.id}
+                className="cursor-pointer hover:bg-muted/40"
+                onClick={() => onEdit(item)}
+              >
+                <TableCell className="font-mono text-xs font-medium">
+                  {item.codigo || <span className="text-muted-foreground italic">—</span>}
+                </TableCell>
+                <TableCell className="max-w-xs" title={item.descricao}>
+                  <span className="line-clamp-2">{item.descricao || <span className="text-muted-foreground italic">—</span>}</span>
+                </TableCell>
+                <TableCell className="text-right tabular-nums font-medium">
+                  {fmtPreco(item.precoCompra)}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {item.fornecedores.length === 0 ? (
+                      <span className="text-muted-foreground text-xs italic">—</span>
+                    ) : (
+                      item.fornecedores.map((f) => (
+                        <Badge key={f} variant="secondary" className="text-xs">
+                          {f}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {item.categorias.map((c) => (
+                      <span
+                        key={c}
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catColor(c)}`}
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {new Date(item.ultimaAtualizacao).toLocaleDateString("pt-BR")}
+                </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive hover:text-destructive"
+                    onClick={() => onDelete(item.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-lg border bg-muted/30 p-10 text-center space-y-2">
+      <p className="text-base font-semibold">Nenhum item no catálogo</p>
+      <p className="text-sm text-muted-foreground">
+        Importe uma planilha de Conexões, Válvulas ou Tubos para popular o catálogo automaticamente.
+      </p>
     </div>
   );
 }
