@@ -13,7 +13,7 @@ import { DashboardErrorState, DashboardLoadingSkeleton } from "@/components/dash
 import { DashboardChartsSection, DashboardInsightsSection } from "@/components/dashboard/LazyDashboardSections";
 import { MonthlyAnalysis } from "@/components/MonthlyAnalysis";
 
-const VALVULAS_STATUS_OPTIONS = ["On time", "Atrasado"];
+const VALVULAS_STATUS_OPTIONS = ["No prazo", "Atrasado", "Crítico", "Chegou", "Estoque", "Verificar aéreo", "Alerta"];
 
 const Valvulas = () => {
   const activeCategory = "Válvulas";
