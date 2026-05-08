@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   DollarSign, Percent, Trash2, TrendingUp, Search, BookmarkPlus,
-  ChevronDown, ChevronUp, Building2, Package, Clock, Star, X,
+  ChevronDown, ChevronUp, Building2, Package, Clock, Star, X, Plus,
   FileText, Calculator, History, AlertCircle, CheckCircle2,
   Folder, FolderOpen, Download, FileSpreadsheet, FileDown,
 } from "lucide-react";
@@ -49,6 +49,37 @@ interface CotacaoSalva {
   margem: number;
   observacao: string;
 }
+
+interface FormalQuoteItem {
+  id: string;
+  codigo: string;
+  descricao: string;
+  unidade: string;
+  qtd: number;
+  precoUSD: number;
+}
+
+interface FormalQuoteFormState {
+  cliente: string;
+  referencia: string;
+  data: string;
+  validade: string;
+  cambio: string;
+  condicoesPagamento: string;
+  prazoEntrega: string;
+  observacoes: string;
+}
+
+const FORMAL_QUOTE_EMPTY: FormalQuoteFormState = {
+  cliente: "",
+  referencia: "",
+  data: new Date().toISOString().slice(0, 10),
+  validade: "",
+  cambio: "5.20",
+  condicoesPagamento: "",
+  prazoEntrega: "",
+  observacoes: "",
+};
 
 interface VendaItem {
   id: string;
@@ -350,6 +381,178 @@ function sanitizeFilename(s: string) {
   return (s || "cotacoes").replace(/[^\w\-]+/g, "_").slice(0, 60);
 }
 
+function exportFormalQuotePDF(form: FormalQuoteFormState, items: FormalQuoteItem[]) {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const cambio = Number(form.cambio) || 5.20;
+  const today = new Date().toLocaleDateString("pt-BR");
+  const BLUE: [number, number, number] = [30, 64, 175];
+  const BLUE_LIGHT: [number, number, number] = [239, 246, 255];
+
+  // ── HCI header ──
+  doc.setFillColor(...BLUE);
+  doc.rect(0, 0, pageW, 22, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text("HCI", 10, 14);
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.4);
+  doc.line(24, 4, 24, 18);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text("Cotação de Materiais", 27, 14);
+  doc.setFontSize(8);
+  doc.text(`Gerado em: ${today}`, pageW - 10, 14, { align: "right" });
+
+  // ── Quote header ──
+  let y = 30;
+  doc.setTextColor(0, 0, 0);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text(`COTAÇÃO Nº ${form.referencia || "—"}`, 14, y);
+  y += 8;
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  const dataFormatada = form.data
+    ? new Date(form.data + "T12:00:00").toLocaleDateString("pt-BR")
+    : today;
+
+  if (form.cliente) {
+    doc.setFont("helvetica", "bold");
+    doc.text("Cliente:", 14, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(form.cliente, 38, y);
+    y += 6;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Data:", 14, y);
+  doc.setFont("helvetica", "normal");
+  doc.text(dataFormatada, 38, y);
+
+  if (form.validade) {
+    const valFormatada = new Date(form.validade + "T12:00:00").toLocaleDateString("pt-BR");
+    doc.setFont("helvetica", "bold");
+    doc.text("Validade:", pageW / 2, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(valFormatada, pageW / 2 + 22, y);
+  }
+  y += 10;
+
+  // ── Products table ──
+  const totalUSD = items.reduce((s, i) => s + i.precoUSD * i.qtd, 0);
+  const totalBRL = totalUSD * cambio;
+
+  autoTable(doc, {
+    startY: y,
+    head: [["#", "Código", "Descrição", "Un.", "Qtd", "Unit. (USD)", "Total (USD)"]],
+    body: items.map((item, idx) => [
+      idx + 1,
+      item.codigo || "—",
+      item.descricao,
+      item.unidade,
+      item.qtd,
+      `$ ${item.precoUSD.toFixed(2)}`,
+      `$ ${(item.precoUSD * item.qtd).toFixed(2)}`,
+    ]),
+    foot: [
+      ["", "", "", "", "", "Total USD:", `$ ${totalUSD.toFixed(2)}`],
+      ["", "", "", "", "", `Total BRL (${cambio}):`, `R$ ${totalBRL.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`],
+    ],
+    headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 8 },
+    bodyStyles: { fontSize: 8 },
+    alternateRowStyles: { fillColor: BLUE_LIGHT },
+    footStyles: { fontStyle: "bold", fontSize: 9, fillColor: [230, 235, 255] as [number, number, number] },
+    columnStyles: {
+      0: { cellWidth: 8,  halign: "center" },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 78 },
+      3: { cellWidth: 12, halign: "center" },
+      4: { cellWidth: 12, halign: "center" },
+      5: { cellWidth: 24, halign: "right" },
+      6: { cellWidth: 24, halign: "right" },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let ty = ((doc as any).lastAutoTable?.finalY ?? y + 50) + 10;
+
+  // ── Commercial terms ──
+  if (form.condicoesPagamento || form.prazoEntrega) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("Condições Comerciais", 14, ty);
+    ty += 5;
+    doc.setFont("helvetica", "normal");
+    if (form.condicoesPagamento) { doc.text(`Pagamento: ${form.condicoesPagamento}`, 14, ty); ty += 5; }
+    if (form.prazoEntrega) { doc.text(`Prazo de entrega: ${form.prazoEntrega}`, 14, ty); ty += 5; }
+    ty += 2;
+  }
+  if (form.observacoes) {
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("Observações:", 14, ty);
+    ty += 5;
+    doc.setFont("helvetica", "normal");
+    const lines = doc.splitTextToSize(form.observacoes, pageW - 28);
+    doc.text(lines, 14, ty);
+  }
+
+  // ── Footer ──
+  const pageH = doc.internal.pageSize.getHeight();
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text(`HCI Importcontrol — Cotação de Materiais — ${today}`, pageW / 2, pageH - 5, { align: "center" });
+
+  doc.save(`cotacao_${sanitizeFilename(form.referencia || form.cliente || "formal")}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+function exportFormalQuoteXLSX(form: FormalQuoteFormState, items: FormalQuoteItem[]) {
+  const cambio = Number(form.cambio) || 5.20;
+  const totalUSD = items.reduce((s, i) => s + i.precoUSD * i.qtd, 0);
+  const totalBRL = totalUSD * cambio;
+  const dataFormatada = form.data ? new Date(form.data + "T12:00:00").toLocaleDateString("pt-BR") : "";
+  const valFormatada  = form.validade ? new Date(form.validade + "T12:00:00").toLocaleDateString("pt-BR") : "";
+
+  const rows = [
+    ["COTAÇÃO Nº", form.referencia || ""],
+    ["Cliente:", form.cliente || ""],
+    ["Data:", dataFormatada, "Validade:", valFormatada],
+    ["Câmbio (R$/USD):", cambio],
+    [],
+    ["#", "Código", "Descrição", "Un.", "Qtd", "Preço Unit. (USD)", "Total (USD)", "Total (R$)"],
+    ...items.map((item, idx) => [
+      idx + 1,
+      item.codigo,
+      item.descricao,
+      item.unidade,
+      item.qtd,
+      item.precoUSD,
+      +(item.precoUSD * item.qtd).toFixed(2),
+      +(item.precoUSD * item.qtd * cambio).toFixed(2),
+    ]),
+    [],
+    ["", "", "", "", "", "TOTAL USD", +totalUSD.toFixed(2), ""],
+    ["", "", "", "", "", "TOTAL BRL", "", +totalBRL.toFixed(2)],
+    [],
+    ...(form.condicoesPagamento ? [["Condições Pagamento:", form.condicoesPagamento]] : []),
+    ...(form.prazoEntrega       ? [["Prazo de Entrega:",    form.prazoEntrega]]       : []),
+    ...(form.observacoes        ? [["Observações:",         form.observacoes]]        : []),
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [
+    { wch: 5 }, { wch: 18 }, { wch: 52 }, { wch: 8 }, { wch: 8 },
+    { wch: 18 }, { wch: 16 }, { wch: 16 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Cotação");
+  XLSX.writeFile(wb, `cotacao_${sanitizeFilename(form.referencia || form.cliente || "formal")}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 // ─────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────
@@ -456,20 +659,31 @@ export default function Precificacao() {
   }, [modoB_compra, modoB_cambio, modoB_frete, modoB_imposto, margemNum, fatorNum]);
 
   // ── Cotação por produto ─────────────────────────────────────────────
+  const [quoteTab, setQuoteTab] = useState<"margem" | "formulario">("margem");
+
+  // ── Análise de margem (tab 1) ────────────────────────────────────────
   const [searchQuery, setSearchQuery]     = useState("");
   const [showDropdown, setShowDropdown]   = useState(false);
   const [cotacaoForm, setCotacaoForm]     = useState<CotacaoFormState>(COTACAO_EMPTY);
   const [selectedProduct, setSelectedProduct] = useState<CatalogoItem | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // ── Formulário de Cotação Formal (tab 2) ─────────────────────────────
+  const [formalForm, setFormalForm] = useState<FormalQuoteFormState>(FORMAL_QUOTE_EMPTY);
+  const [formalItems, setFormalItems] = useState<FormalQuoteItem[]>([]);
+  const [formalAddItem, setFormalAddItem] = useState({ codigo: "", descricao: "", unidade: "UN", qtd: "1", precoUSD: "" });
+  const [formalItemSearch, setFormalItemSearch] = useState("");
+  const [formalShowDropdown, setFormalShowDropdown] = useState(false);
+  const formalSearchRef = useRef<HTMLDivElement>(null);
+  const { results: formalResults, loading: formalLoading } = useProductSearch(formalItemSearch);
+
   const { results: searchResults, loading: searchLoading } = useProductSearch(searchQuery);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowDropdown(false);
+      if (formalSearchRef.current && !formalSearchRef.current.contains(e.target as Node)) setFormalShowDropdown(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -817,19 +1031,51 @@ export default function Precificacao() {
         {/* ── Cotação por Produto ─────────────────────────────────────── */}
         <div className="relative overflow-hidden rounded-xl border border-violet-500/30 bg-card shadow-sm">
           <div className="absolute inset-x-0 top-0 h-[2.5px] bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />
-          <div className="p-5 pb-3 flex items-center gap-2">
+          <div className="p-5 pb-0 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
               <FileText className="h-4 w-4 text-violet-500" />
             </div>
             <div>
               <h2 className="text-base font-semibold">Cotação por Produto</h2>
               <p className="text-xs text-muted-foreground">
-                Busque pelo código ou descrição do produto para puxar preços automaticamente
+                Análise de margem ou gere um formulário formal de cotação para o cliente
               </p>
             </div>
           </div>
 
-          <div className="px-5 pb-5 space-y-4">
+          {/* Tab bar */}
+          <div className="flex border-b border-border/60 mt-4 px-5">
+            <button
+              onClick={() => setQuoteTab("margem")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                quoteTab === "margem"
+                  ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Calculator className="h-3.5 w-3.5" />
+              Análise de Margem
+            </button>
+            <button
+              onClick={() => setQuoteTab("formulario")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                quoteTab === "formulario"
+                  ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Formulário de Cotação
+              {formalItems.length > 0 && (
+                <span className="ml-1 rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                  {formalItems.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {quoteTab === "margem" && (
+          <div className="px-5 pb-5 pt-4 space-y-4">
             {/* Search */}
             <div className="relative" ref={searchRef}>
               <label className="text-xs text-muted-foreground mb-1 block font-medium">
@@ -1052,7 +1298,7 @@ export default function Precificacao() {
               </div>
             </div>
 
-            {/* Result + actions */}
+            {/* ── Result + actions ── */}
             <div className="flex flex-col sm:flex-row gap-4">
               {/* Result panel */}
               {cotacaoCalc ? (
@@ -1212,6 +1458,317 @@ export default function Precificacao() {
               </div>
             </div>
           </div>
+          )} {/* end quoteTab === "margem" */}
+
+          {/* ── Formulário de Cotação Formal ────────────────────────── */}
+          {quoteTab === "formulario" && (
+          <div className="px-5 pb-5 pt-4 space-y-5">
+
+            {/* Header info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="lg:col-span-2">
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Cliente</label>
+                <Input
+                  placeholder="Nome do cliente"
+                  value={formalForm.cliente}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, cliente: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Nº / Referência da Cotação</label>
+                <Input
+                  placeholder="Ex: COT-2025-001"
+                  value={formalForm.referencia}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, referencia: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Câmbio (R$/USD)</label>
+                <Input
+                  type="number" min="0" step="0.01" placeholder="5.20"
+                  value={formalForm.cambio}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, cambio: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Data</label>
+                <Input
+                  type="date"
+                  value={formalForm.data}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, data: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Validade até</label>
+                <Input
+                  type="date"
+                  value={formalForm.validade}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, validade: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Condições de Pagamento</label>
+                <Input
+                  placeholder="Ex: 30/60/90 dias"
+                  value={formalForm.condicoesPagamento}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, condicoesPagamento: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block font-medium">Prazo de Entrega</label>
+                <Input
+                  placeholder="Ex: 45 dias úteis"
+                  value={formalForm.prazoEntrega}
+                  onChange={(e) => setFormalForm((f) => ({ ...f, prazoEntrega: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Add product row */}
+            <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
+                Adicionar Item
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="lg:col-span-2" ref={formalSearchRef}>
+                  <label className="text-xs text-muted-foreground mb-1 block">Descrição / Código</label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Pesquise no catálogo..."
+                      className="pl-8"
+                      value={formalItemSearch}
+                      onChange={(e) => {
+                        setFormalItemSearch(e.target.value);
+                        setFormalAddItem((f) => ({ ...f, descricao: e.target.value }));
+                        setFormalShowDropdown(true);
+                      }}
+                      onFocus={() => formalItemSearch.trim().length >= 2 && setFormalShowDropdown(true)}
+                    />
+                    {formalShowDropdown && formalItemSearch.trim().length >= 2 && (
+                      <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-border bg-popover shadow-xl">
+                        {formalLoading && <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>}
+                        {!formalLoading && formalResults.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum item encontrado — preencha manualmente.</div>
+                        )}
+                        {formalResults.map((item) => (
+                          <button
+                            key={item.id} type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-0 transition-colors"
+                            onMouseDown={() => {
+                              const desc = item.codigo ? `${item.codigo} - ${item.descricao}` : item.descricao;
+                              setFormalItemSearch(desc);
+                              setFormalAddItem((f) => ({
+                                ...f,
+                                codigo: item.codigo,
+                                descricao: item.descricao,
+                                precoUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoUSD,
+                              }));
+                              setFormalShowDropdown(false);
+                            }}
+                          >
+                            <p className="text-xs font-semibold truncate">{item.descricao || item.codigo}</p>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                              {item.codigo && <span className="font-mono bg-primary/10 text-primary px-1 rounded">{item.codigo}</span>}
+                              {item.preco_compra != null && <span className="text-blue-600 dark:text-blue-400">$ {item.preco_compra.toFixed(2)}</span>}
+                              {item.fornecedores[0] && <span>• {item.fornecedores[0]}</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Código</label>
+                  <Input
+                    placeholder="Ex: CL90ST004"
+                    value={formalAddItem.codigo}
+                    onChange={(e) => setFormalAddItem((f) => ({ ...f, codigo: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Un.</label>
+                  <Input
+                    placeholder="UN"
+                    value={formalAddItem.unidade}
+                    onChange={(e) => setFormalAddItem((f) => ({ ...f, unidade: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Qtd</label>
+                  <Input
+                    type="number" min="1" placeholder="1"
+                    value={formalAddItem.qtd}
+                    onChange={(e) => setFormalAddItem((f) => ({ ...f, qtd: e.target.value }))}
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <label className="text-xs text-muted-foreground mb-1 block">Preço Unit. (USD)</label>
+                  <Input
+                    type="number" min="0" step="0.01" placeholder="0.00"
+                    value={formalAddItem.precoUSD}
+                    onChange={(e) => setFormalAddItem((f) => ({ ...f, precoUSD: e.target.value }))}
+                  />
+                </div>
+                <div className="flex items-end lg:col-span-3">
+                  <Button
+                    className="gap-1 bg-violet-600 hover:bg-violet-700 text-white"
+                    disabled={!formalAddItem.descricao || !formalAddItem.precoUSD}
+                    onClick={() => {
+                      const qtd   = Number(formalAddItem.qtd)     || 1;
+                      const preco = Number(formalAddItem.precoUSD) || 0;
+                      if (!formalAddItem.descricao || preco <= 0) return;
+                      setFormalItems((prev) => ([
+                        ...prev,
+                        {
+                          id: Date.now().toString(),
+                          codigo:    formalAddItem.codigo,
+                          descricao: formalAddItem.descricao,
+                          unidade:   formalAddItem.unidade || "UN",
+                          qtd,
+                          precoUSD:  preco,
+                        },
+                      ]));
+                      setFormalAddItem({ codigo: "", descricao: "", unidade: "UN", qtd: "1", precoUSD: "" });
+                      setFormalItemSearch("");
+                    }}
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar Item
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Items table */}
+            {formalItems.length > 0 ? (
+              <div className="overflow-x-auto rounded-xl border border-border/60">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50 border-b">
+                      {["#", "Código", "Descrição", "Un.", "Qtd", "Unit. (USD)", "Total (USD)", "Total (R$)", ""].map((h) => (
+                        <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap text-muted-foreground">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formalItems.map((item, idx) => {
+                      const cambioNum = Number(formalForm.cambio) || 5.20;
+                      return (
+                        <tr key={item.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                          <td className="px-3 py-2 text-center text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2 font-mono">{item.codigo || "—"}</td>
+                          <td className="px-3 py-2 font-medium max-w-[200px]">{item.descricao}</td>
+                          <td className="px-3 py-2 text-center">{item.unidade}</td>
+                          <td className="px-3 py-2 text-center">
+                            <input
+                              type="number" min="1"
+                              value={item.qtd}
+                              onChange={(e) => {
+                                const v = Math.max(1, Number(e.target.value) || 1);
+                                setFormalItems((prev) => prev.map((i) => i.id === item.id ? { ...i, qtd: v } : i));
+                              }}
+                              className="w-14 h-6 text-xs text-center rounded border border-input bg-background px-1 font-mono"
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-mono">
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={item.precoUSD}
+                              onChange={(e) => {
+                                const v = Number(e.target.value) || 0;
+                                setFormalItems((prev) => prev.map((i) => i.id === item.id ? { ...i, precoUSD: v } : i));
+                              }}
+                              className="w-20 h-6 text-xs text-right rounded border border-input bg-background px-1 font-mono"
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-mono font-semibold">$ {(item.precoUSD * item.qtd).toFixed(2)}</td>
+                          <td className="px-3 py-2 font-mono text-emerald-600 dark:text-emerald-400">
+                            {(item.precoUSD * item.qtd * cambioNum).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Button size="sm" variant="ghost" onClick={() => setFormalItems((prev) => prev.filter((i) => i.id !== item.id))}>
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    {(() => {
+                      const cambioNum = Number(formalForm.cambio) || 5.20;
+                      const totalUSD = formalItems.reduce((s, i) => s + i.precoUSD * i.qtd, 0);
+                      const totalBRL = totalUSD * cambioNum;
+                      return (
+                        <tr className="bg-violet-500/10 font-semibold text-xs border-t">
+                          <td colSpan={6} className="px-3 py-2 text-right text-muted-foreground">Total</td>
+                          <td className="px-3 py-2 font-mono font-bold text-primary">$ {totalUSD.toFixed(2)}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {totalBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          </td>
+                          <td />
+                        </tr>
+                      );
+                    })()}
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-violet-500/30 p-8 text-center">
+                <Package className="h-8 w-8 mx-auto mb-2 text-violet-300" />
+                <p className="text-sm text-muted-foreground">Nenhum item adicionado ainda</p>
+                <p className="text-xs text-muted-foreground mt-1">Use o campo acima para buscar produtos no catálogo ou inserir manualmente</p>
+              </div>
+            )}
+
+            {/* Observations */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block font-medium">Observações</label>
+              <textarea
+                rows={3}
+                placeholder="Notas adicionais, termos de garantia, etc..."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                value={formalForm.observacoes}
+                onChange={(e) => setFormalForm((f) => ({ ...f, observacoes: e.target.value }))}
+              />
+            </div>
+
+            {/* Export actions */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button
+                className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                disabled={formalItems.length === 0}
+                onClick={() => exportFormalQuotePDF(formalForm, formalItems)}
+              >
+                <FileDown className="h-4 w-4" />
+                Exportar PDF
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={formalItems.length === 0}
+                onClick={() => exportFormalQuoteXLSX(formalForm, formalItems)}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                Exportar Excel
+              </Button>
+              <Button
+                variant="ghost" size="sm"
+                className="text-xs text-muted-foreground gap-1 ml-auto"
+                onClick={() => {
+                  setFormalForm(FORMAL_QUOTE_EMPTY);
+                  setFormalItems([]);
+                  setFormalItemSearch("");
+                  setFormalAddItem({ codigo: "", descricao: "", unidade: "UN", qtd: "1", precoUSD: "" });
+                }}
+              >
+                <X className="h-3 w-3" /> Limpar tudo
+              </Button>
+            </div>
+          </div>
+          )} {/* end quoteTab === "formulario" */}
+
         </div>
 
         {/* ── Histórico de Cotações ────────────────────────────────────── */}
