@@ -1,0 +1,1 @@
+DELETE FROM public.pedidos WHERE categoria = 'Válvulas';
