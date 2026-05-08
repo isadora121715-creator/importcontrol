@@ -8,6 +8,7 @@ export interface CatalogoItem {
   codigo: string;
   descricao: string;
   precoCompra: number | null;
+  precoVenda:  number | null;
   fornecedores: string[];   // lista de fornecedores únicos
   categorias: string[];     // Tubos | Válvulas | Conexões
   ultimaAtualizacao: string; // ISO date
@@ -21,6 +22,7 @@ function rowToItem(row: any): CatalogoItem {
     codigo:           (row.codigo         as string) ?? "",
     descricao:        (row.descricao      as string) ?? "",
     precoCompra:       row.preco_compra != null ? Number(row.preco_compra) : null,
+    precoVenda:        row.preco_venda  != null ? Number(row.preco_venda)  : null,
     fornecedores:     (row.fornecedores   as string[]) ?? [],
     categorias:       (row.categorias     as string[]) ?? [],
     ultimaAtualizacao:(row.ultima_atualizacao as string) ?? new Date().toISOString(),
@@ -33,6 +35,7 @@ function itemToRow(i: CatalogoItem) {
     codigo:             i.codigo,
     descricao:          i.descricao,
     preco_compra:       i.precoCompra,
+    preco_venda:        i.precoVenda,
     fornecedores:       i.fornecedores,
     categorias:         i.categorias,
     ultima_atualizacao: i.ultimaAtualizacao,
@@ -69,12 +72,12 @@ export async function readCatalogo(): Promise<CatalogoItem[]> {
 // ── leitura paginada de pedidos (para catálogo ao vivo) ───────────────────────
 async function fetchPedidosForCatalog(): Promise<
   Array<{
-    codigo: string | null;
-    descricao: string | null;
+    codigo:       string | null;
+    descricao:    string | null;
     preco_compra: number | null;
-    preco_venda: number | null;
-    fornecedor: string | null;
-    categoria: string;
+    preco_venda:  number | null;
+    fornecedor:   string | null;
+    categoria:    string;
   }>
 > {
   const PAGE = 500;
@@ -120,25 +123,25 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
     const descricao = (row.descricao ?? "").trim();
     if (!codigo && !descricao) continue;
 
-    const key       = makeKey(codigo, descricao);
+    const key        = makeKey(codigo, descricao);
     const fornecedor = (row.fornecedor ?? "").trim();
     const categoria  = (row.categoria  ?? "");
-    const preco: number | null =
-      row.preco_compra != null ? Number(row.preco_compra)
-      : row.preco_venda != null ? Number(row.preco_venda)
-      : null;
+    const precoCompra: number | null = row.preco_compra != null ? Number(row.preco_compra) : null;
+    const precoVenda:  number | null = row.preco_venda  != null ? Number(row.preco_venda)  : null;
 
     if (byKey.has(key)) {
       const item = byKey.get(key)!;
       if (fornecedor && !item.fornecedores.includes(fornecedor)) item.fornecedores.push(fornecedor);
       if (categoria  && !item.categorias.includes(categoria))   item.categorias.push(categoria);
-      if (preco !== null && item.precoCompra === null)           item.precoCompra = preco;
+      if (precoCompra !== null && item.precoCompra === null) item.precoCompra = precoCompra;
+      if (precoVenda  !== null && item.precoVenda  === null) item.precoVenda  = precoVenda;
     } else {
       byKey.set(key, {
         id:                key,
         codigo,
         descricao,
-        precoCompra:       preco,
+        precoCompra,
+        precoVenda,
         fornecedores:      fornecedor ? [fornecedor] : [],
         categorias:        categoria  ? [categoria]  : [],
         ultimaAtualizacao: now,
@@ -150,8 +153,9 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
   for (const item of manualItems) {
     if (byKey.has(item.id)) {
       const existing = byKey.get(item.id)!;
-      // Preço manual tem prioridade
+      // Preços manuais têm prioridade
       if (item.precoCompra !== null) existing.precoCompra = item.precoCompra;
+      if (item.precoVenda  !== null) existing.precoVenda  = item.precoVenda;
       for (const f of item.fornecedores) {
         if (!existing.fornecedores.includes(f)) existing.fornecedores.push(f);
       }
@@ -218,13 +222,10 @@ export async function syncCatalogo(
     const codigo     = (row.codigo     ?? "").trim();
     const descricao  = (row.descricao  ?? "").trim();
     const fornecedor = (row.fornecedor ?? "").trim();
-    // Usa precoCompra; se ausente, usa precoVenda como referência de custo
-    const precoCompra =
-      typeof row.precoCompra === "number" && row.precoCompra > 0
-        ? row.precoCompra
-        : typeof row.precoVenda === "number" && row.precoVenda > 0
-          ? row.precoVenda
-          : null;
+    const precoCompra: number | null =
+      typeof row.precoCompra === "number" && row.precoCompra > 0 ? row.precoCompra : null;
+    const precoVenda: number | null =
+      typeof row.precoVenda === "number" && row.precoVenda > 0 ? row.precoVenda : null;
 
     if (!codigo && !descricao) continue;
 
@@ -234,9 +235,11 @@ export async function syncCatalogo(
       const item = byKey.get(key)!;
       let changed = false;
 
-      // Atualiza preço: aceita novo valor se atual é nulo, ou se precoCompra mudou
       if (precoCompra !== null && (item.precoCompra === null || item.precoCompra !== precoCompra)) {
         item.precoCompra = precoCompra; changed = true;
+      }
+      if (precoVenda !== null && (item.precoVenda === null || item.precoVenda !== precoVenda)) {
+        item.precoVenda = precoVenda; changed = true;
       }
       if (fornecedor && !item.fornecedores.includes(fornecedor)) {
         item.fornecedores.push(fornecedor); changed = true;
@@ -257,7 +260,8 @@ export async function syncCatalogo(
         id: key,
         codigo,
         descricao,
-        precoCompra,          // já inclui fallback para precoVenda quando necessário
+        precoCompra,
+        precoVenda,
         fornecedores: fornecedor ? [fornecedor] : [],
         categorias:   [categoria],
         ultimaAtualizacao: now,

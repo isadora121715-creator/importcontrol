@@ -40,6 +40,11 @@ function fmtPreco(val: number | null): string {
   return `$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function fmtVenda(val: number | null): string {
+  if (val === null) return "—";
+  return `R$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function makeKey(codigo: string, descricao: string): string {
   if (codigo) return codigo.trim().toUpperCase();
   return descricao.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 60);
@@ -58,7 +63,7 @@ function catColor(cat: string) {
 }
 
 function emptyItem(): Omit<CatalogoItem, "id" | "ultimaAtualizacao"> {
-  return { codigo: "", descricao: "", precoCompra: null, fornecedores: [], categorias: [] };
+  return { codigo: "", descricao: "", precoCompra: null, precoVenda: null, fornecedores: [], categorias: [] };
 }
 
 // ── load image as base64 for jsPDF ───────────────────────────────────────────
@@ -85,14 +90,15 @@ function exportExcel(items: CatalogoItem[]) {
   const wb = XLSX.utils.book_new();
   const today = new Date().toISOString().slice(0, 10);
 
-  const HEADER = ["Código", "Descrição", "Preço Compra (USD)", "Fornecedores", "Categorias", "Última Atualização"];
-  const colWidths = [{ wch: 18 }, { wch: 52 }, { wch: 20 }, { wch: 32 }, { wch: 18 }, { wch: 20 }];
+  const HEADER = ["Código", "Descrição", "Preço Compra (USD)", "Preço Venda (R$)", "Fornecedores", "Categorias", "Última Atualização"];
+  const colWidths = [{ wch: 18 }, { wch: 52 }, { wch: 20 }, { wch: 18 }, { wch: 32 }, { wch: 18 }, { wch: 20 }];
 
   const toRows = (list: CatalogoItem[]) =>
     list.map((i) => [
       i.codigo || "",
       i.descricao || "",
       i.precoCompra ?? "",
+      i.precoVenda  ?? "",
       i.fornecedores.join(", ") || "",
       i.categorias.join(", ") || "",
       i.ultimaAtualizacao ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR") : "",
@@ -213,13 +219,14 @@ async function exportPDF(items: CatalogoItem[]) {
       i.codigo || "—",
       i.descricao || "—",
       fmtPreco(i.precoCompra),
+      fmtVenda(i.precoVenda),
       i.fornecedores.join("\n") || "—",
       new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR"),
     ]);
 
     autoTable(doc, {
       startY: 26,
-      head: [["Código", "Descrição", "Preço Compra (USD)", "Fornecedores", "Atualização"]],
+      head: [["Código", "Descrição", "Preço Compra (USD)", "Preço Venda (R$)", "Fornecedores", "Atualização"]],
       body: tableBody,
       headStyles: {
         fillColor: BLUE,
@@ -230,11 +237,12 @@ async function exportPDF(items: CatalogoItem[]) {
       bodyStyles: { fontSize: 7.5 },
       alternateRowStyles: { fillColor: BLUE_LIGHT },
       columnStyles: {
-        0: { cellWidth: 26 },
-        1: { cellWidth: 110 },
-        2: { cellWidth: 32, halign: "right" },
-        3: { cellWidth: 60 },
-        4: { cellWidth: 26, halign: "center" },
+        0: { cellWidth: 24 },
+        1: { cellWidth: 96 },
+        2: { cellWidth: 30, halign: "right" },
+        3: { cellWidth: 28, halign: "right" },
+        4: { cellWidth: 52 },
+        5: { cellWidth: 24, halign: "center" },
       },
       margin: { left: 8, right: 8 },
       didDrawPage: (data) => {
@@ -343,6 +351,7 @@ export default function Catalogo() {
       codigo:       item.codigo,
       descricao:    item.descricao,
       precoCompra:  item.precoCompra,
+      precoVenda:   item.precoVenda,
       fornecedores: [...item.fornecedores],
       categorias:   [...item.categorias],
     });
@@ -387,6 +396,7 @@ export default function Catalogo() {
         codigo:            form.codigo,
         descricao:         form.descricao,
         precoCompra:       form.precoCompra,
+        precoVenda:        form.precoVenda,
         fornecedores:      form.fornecedores,
         categorias:        form.categorias,
         ultimaAtualizacao: now,
@@ -608,7 +618,7 @@ export default function Catalogo() {
 
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className="space-y-1 col-span-2">
                 <Label>Código</Label>
                 <Input
                   placeholder="ex: TUB-001"
@@ -628,6 +638,22 @@ export default function Catalogo() {
                     setForm((f) => ({
                       ...f,
                       precoCompra: e.target.value === "" ? null : Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Preço de Venda (R$) <span className="text-xs text-muted-foreground font-normal">opcional</span></Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0,00"
+                  value={form.precoVenda ?? ""}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      precoVenda: e.target.value === "" ? null : Number(e.target.value),
                     }))
                   }
                 />
@@ -781,7 +807,8 @@ function CatalogTable({
           <TableRow className="bg-muted/50">
             <TableHead className="w-32">Código</TableHead>
             <TableHead>Descrição</TableHead>
-            <TableHead className="w-36 text-right">Preço Compra</TableHead>
+            <TableHead className="w-32 text-right">Preço Compra</TableHead>
+            <TableHead className="w-32 text-right">Preço Venda</TableHead>
             <TableHead>Fornecedores</TableHead>
             <TableHead>Categorias</TableHead>
             <TableHead className="w-32">Atualização</TableHead>
@@ -791,7 +818,7 @@ function CatalogTable({
         <TableBody>
           {items.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+              <TableCell colSpan={8} className="text-center text-muted-foreground py-10">
                 {emptyMessage}
               </TableCell>
             </TableRow>
@@ -810,6 +837,9 @@ function CatalogTable({
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-medium">
                   {fmtPreco(item.precoCompra)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
+                  {fmtVenda(item.precoVenda)}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
