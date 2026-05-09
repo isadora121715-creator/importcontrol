@@ -727,9 +727,27 @@ const Embarques = () => {
       const poVal = intlColumns[3] ? String(r[intlColumns[3]] ?? "").trim() : "";
       if (poVal === "-") return false;
 
-      if (intlFilterTipos.length > 0 && intlField.container) {
-        const cont = String(r[intlField.container] ?? "").toLowerCase();
-        const match = intlFilterTipos.some((t) => cont.includes(t.toLowerCase()));
+      if (intlFilterTipos.length > 0) {
+        // Normalize accents so "Aéreo" matches "aereo", "AÉREO", etc.
+        const normStr = (s: string) =>
+          s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        // Try text column first; fall back to __qty* synthetic keys
+        const contText = intlField.container
+          ? normStr(String(r[intlField.container] ?? ""))
+          : "";
+        const qty20 = detectQty(r["__qty20"]);
+        const qty40 = detectQty(r["__qty40"]);
+        const qty45 = detectQty(r["__qty45"]);
+        const match = intlFilterTipos.some((t) => {
+          const tn = normStr(t);
+          // "Aéreo" / "aereo" — match air/aer keywords in text column
+          if (tn === "aereo") return contText.includes("aer") || contText.includes("air");
+          // 20ft / 40ft / 45ft — match text column OR synthetic qty columns
+          if (tn === "20" || tn === "20ft") return contText.includes("20") || qty20 > 0;
+          if (tn === "40" || tn === "40ft") return contText.includes("40") || qty40 > 0;
+          if (tn === "45" || tn === "45ft") return contText.includes("45") || qty45 > 0;
+          return contText.includes(tn);
+        });
         if (!match) return false;
       }
       if (intlFilterPO && intlField.po) {
@@ -763,6 +781,7 @@ const Embarques = () => {
     const containers = { "20ft": 0, "40ft": 0, "45ft": 0 };
     const modalidades = { LCL: 0, FCL: 0, Aereo: 0 };
     const agentesSet = new Set<string>();
+    const exportadoresSet = new Set<string>();
     let pesoTotal = 0;
     let valorTotal = 0;
     let custoFinalTotal = 0;
@@ -786,6 +805,7 @@ const Embarques = () => {
       else if (cont.includes("fcl") || cont.includes("20") || cont.includes("40") || cont.includes("45")) modalidades.FCL += 1;
 
       if (intlField.agente && r[intlField.agente]) agentesSet.add(String(r[intlField.agente]));
+      if (intlField.exportador && r[intlField.exportador]) exportadoresSet.add(String(r[intlField.exportador]));
       if (intlField.peso) pesoTotal += detectQty(r[intlField.peso]);
       if (intlField.valor) valorTotal += detectQty(r[intlField.valor]);
       // Custo Total Final (col AG = índice 32) e Valor P.O (col Q = índice 16)
@@ -832,7 +852,7 @@ const Embarques = () => {
       qty45: monthMap.get(mk)?.qty45 ?? 0,
       peso: monthMap.get(mk)?.peso ?? 0,
     }));
-    return { containers: containersFinal, modalidades: modalidadesFinal, agentes: agentesSet.size, pesoTotal, valorTotal, custoFinalTotal, valorPOTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
+    return { containers: containersFinal, modalidades: modalidadesFinal, agentes: agentesSet.size, exportadores: exportadoresSet.size, pesoTotal, valorTotal, custoFinalTotal, valorPOTotal, totalContainers, mediaContainers, mediaKgMes, detalhesPorMes, meses: monthsList };
   }, [intlRowsFiltradas, intlField, intlTotals, intlFilterTipos, intlFilterPO, intlFilterExps, intlFilterAgentes, intlFilterMeses]);
 
   const formatBRLIntl = (v: number) =>
@@ -987,23 +1007,34 @@ const Embarques = () => {
     doc.setFont("helvetica", "bold");
     doc.text("Indicadores Gerais", 10, curY);
     curY += 2;
+    const hasFilter = intlFilterTipos.length > 0 || !!intlFilterPO ||
+      intlFilterExps.length > 0 || intlFilterAgentes.length > 0 || intlFilterMeses.length > 0;
     autoTable(doc, {
       startY: curY,
       head: [["Indicador", "Valor"]],
       body: [
-        ["Containers 20ft", (intlTotals.cont20 || intlStats.containers["20ft"]).toLocaleString("pt-BR")],
-        ["Containers 40ft", (intlTotals.cont40 || intlStats.containers["40ft"]).toLocaleString("pt-BR")],
-        ["Containers 45ft", (intlTotals.cont45 || intlStats.containers["45ft"]).toLocaleString("pt-BR")],
-        ["Total de Containers", ((intlTotals.cont20 || intlStats.containers["20ft"]) + (intlTotals.cont40 || intlStats.containers["40ft"]) + (intlTotals.cont45 || intlStats.containers["45ft"])).toLocaleString("pt-BR")],
-        ["Modalidade LCL", intlStats.modalidades.LCL.toLocaleString("pt-BR")],
-        ["Modalidade FCL", intlStats.modalidades.FCL.toLocaleString("pt-BR")],
-        ["Modalidade Aéreo", (intlTotals.aereo || intlStats.modalidades.Aereo).toLocaleString("pt-BR")],
-        ["Total de Exportadores", intlStats.exportadores.length.toLocaleString("pt-BR")],
-        ["Total de Agentes", intlStats.agentes.length.toLocaleString("pt-BR")],
+        ["Containers 20ft", intlKpis.containers["20ft"].toLocaleString("pt-BR")],
+        ["Containers 40ft", intlKpis.containers["40ft"].toLocaleString("pt-BR")],
+        ["Containers 45ft", intlKpis.containers["45ft"].toLocaleString("pt-BR")],
+        ["Total de Containers", intlKpis.totalContainers.toLocaleString("pt-BR")],
+        ["Modalidade LCL", intlKpis.modalidades.LCL.toLocaleString("pt-BR")],
+        ["Modalidade FCL", intlKpis.modalidades.FCL.toLocaleString("pt-BR")],
+        ["Modalidade Aéreo", intlKpis.modalidades.Aereo.toLocaleString("pt-BR")],
+        ["Total de Exportadores", intlKpis.exportadores.toLocaleString("pt-BR")],
+        ["Total de Agentes", intlKpis.agentes.toLocaleString("pt-BR")],
         ["Registros Carregados", intlRows.length.toLocaleString("pt-BR")],
-        ["Registros Filtrados", intlRowsFiltradas.length.toLocaleString("pt-BR")],
-        ["Total de Meses", intlStats.meses.length.toLocaleString("pt-BR")],
-        ["Média de Containers/Mês", intlStats.mediaContainers.toFixed(1)],
+        ["Registros no Relatório", intlRowsFiltradas.length.toLocaleString("pt-BR")],
+        ["Total de Meses", intlKpis.meses.length.toLocaleString("pt-BR")],
+        ["Média de Containers/Mês", intlKpis.mediaContainers.toFixed(1)],
+        ["Total Valor Fretes (USD)", `$ ${intlKpis.custoFinalTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`],
+        ["Total Valor P.O (USD)", `$ ${intlKpis.valorPOTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`],
+        ...(hasFilter ? [["Filtros ativos", [
+          intlFilterTipos.length > 0 ? `Tipo: ${intlFilterTipos.join(", ")}` : null,
+          intlFilterPO ? `PO: ${intlFilterPO}` : null,
+          intlFilterExps.length > 0 ? `Exportador: ${intlFilterExps.join(", ")}` : null,
+          intlFilterAgentes.length > 0 ? `Agente: ${intlFilterAgentes.join(", ")}` : null,
+          intlFilterMeses.length > 0 ? `Meses: ${intlFilterMeses.join(", ")}` : null,
+        ].filter(Boolean).join(" | ")]] : []),
         ["Arquivo", intlFileName || "—"],
       ],
       headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 9 },
@@ -1014,21 +1045,27 @@ const Embarques = () => {
     });
 
     // ── Página 2: Detalhes por Mês ────────────────────────────────────────────
-    if (intlStats.detalhesPorMes.length > 0) {
+    if (intlKpis.detalhesPorMes.length > 0) {
       doc.addPage();
-      drawHeader("Fretes Internacionais — Detalhes por Mês");
+      drawHeader(`Fretes Internacionais — Detalhes por Mês${hasFilter ? " (Filtrado)" : ""}`);
       autoTable(doc, {
         startY: 26,
-        head: [["Mês", "Containers", "Peso Total (kg)"]],
-        body: intlStats.detalhesPorMes.map((d) => [
+        head: [["Mês", "Total Cont.", "20ft", "40ft", "45ft", "Peso (kg)"]],
+        body: intlKpis.detalhesPorMes.map((d) => [
           d.mes,
           d.containers.toLocaleString("pt-BR"),
+          d.qty20 > 0 ? d.qty20.toLocaleString("pt-BR") : "—",
+          d.qty40 > 0 ? d.qty40.toLocaleString("pt-BR") : "—",
+          d.qty45 > 0 ? d.qty45.toLocaleString("pt-BR") : "—",
           Math.round(d.peso).toLocaleString("pt-BR"),
         ]),
         headStyles: { fillColor: BLUE, textColor: 255, fontStyle: "bold", fontSize: 9 },
         bodyStyles: { fontSize: 9 },
         alternateRowStyles: { fillColor: [239, 246, 255] },
-        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+        columnStyles: {
+          1: { halign: "right" }, 2: { halign: "right" },
+          3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" },
+        },
         margin: { left: 10, right: 10 },
       });
     }
@@ -1036,7 +1073,6 @@ const Embarques = () => {
     // ── Página 3: Listagem resumida dos fretes filtrados ─────────────────────
     if (intlRowsFiltradas.length > 0) {
       doc.addPage();
-      const hasFilter = intlFilterTipos.length > 0 || !!intlFilterPO || intlFilterExps.length > 0 || intlFilterAgentes.length > 0 || intlFilterMeses.length > 0;
       drawHeader(`Fretes Internacionais — Listagem${hasFilter ? " (Filtrada)" : ""}`);
       const tableBody = intlRowsFiltradas.map((row) => {
         const poColD = intlColumns[3] ? String(row[intlColumns[3]] ?? "") : "";
