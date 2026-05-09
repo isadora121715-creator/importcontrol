@@ -96,7 +96,7 @@ export function DelayAlertTable({ data, onPoClick, activePo, categoria = "Conex√
                     <TableCell className="font-mono text-xs">
                       {r.po ? (
                         <button
-                          onClick={() => onPoClick?.(activePo === r.po ? "all" : r.po!)}
+                          onClick={() => onPoClick?.(r.po!)}
                           className="flex cursor-pointer items-center gap-1 text-primary hover:underline"
                           title="Clique para filtrar por esta PO"
                         >

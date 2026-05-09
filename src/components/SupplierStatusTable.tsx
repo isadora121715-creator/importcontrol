@@ -93,7 +93,9 @@ export function SupplierStatusTable({ data, onPoClick, activePo, categoria = "Co
 
   const handlePoClick = (po: string) => {
     if (onPoClick) {
-      onPoClick(activePo === po ? "all" : po);
+      // Never toggle off — keeping the PO filter active preserves the dashboard view.
+      // The user can clear it via the "Limpar" button above the table or the FilterSidebar.
+      onPoClick(po);
     }
   };
 

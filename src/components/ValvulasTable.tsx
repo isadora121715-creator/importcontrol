@@ -102,7 +102,7 @@ export function ValvulasTable({ data, onPoClick, activePo, isRefreshing = false,
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onPoClick?.(activePo === r.po ? "all" : r.po!);
+                            onPoClick?.(r.po!);
                           }}
                           className="flex cursor-pointer items-center gap-1 text-primary hover:underline"
                           title="Clique para filtrar por esta PO"
