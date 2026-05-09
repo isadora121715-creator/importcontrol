@@ -1212,9 +1212,6 @@ export default function Precificacao() {
               </div>
             </div>
           </div>
-          </div>
-
-        </div>
 
         {/* ── Histórico de Cotações ────────────────────────────────────── */}
         <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
