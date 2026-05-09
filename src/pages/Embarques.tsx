@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePageState } from "@/hooks/usePageState";
 import staticIntl from "@/data/fretes-internacionais.json";
 import {
   Ship,
@@ -239,7 +240,7 @@ const ROTAS_AEREAS = [
 // ---------------------------------------------------------------------------
 const Embarques = () => {
   const { toast } = useToast();
-  const [selectedContainer, setSelectedContainer] = useState<string>("20ft");
+  const [selectedContainer, setSelectedContainer] = usePageState<string>("embarques.selectedContainer", "20ft");
 
   // Fretes FCL — agora apenas exibição filtrada por tipo de container
   const [fretesFcl] = useState<FreteFCL[]>(FRETES_FCL_DEFAULT);
@@ -556,11 +557,12 @@ const Embarques = () => {
   };
 
   // ---- Filtros e estatísticas para Internacionais ----
-  const [intlFilterTipos, setIntlFilterTipos] = useState<string[]>([]);
-  const [intlFilterPO, setIntlFilterPO] = useState<string>("");
-  const [intlFilterExps, setIntlFilterExps] = useState<string[]>([]);
-  const [intlFilterAgentes, setIntlFilterAgentes] = useState<string[]>([]);
-  const [intlFilterMeses, setIntlFilterMeses] = useState<string[]>([]);
+  const [intlFilterTipos, setIntlFilterTipos] = usePageState<string[]>("embarques.intlFilterTipos", []);
+  const [intlFilterPO, setIntlFilterPO] = usePageState<string>("embarques.intlFilterPO", "");
+  const [intlFilterExps, setIntlFilterExps] = usePageState<string[]>("embarques.intlFilterExps", []);
+  const [intlFilterAgentes, setIntlFilterAgentes] = usePageState<string[]>("embarques.intlFilterAgentes", []);
+  const [intlFilterMeses, setIntlFilterMeses] = usePageState<string[]>("embarques.intlFilterMeses", []);
+  const [activeTab, setActiveTab] = usePageState<string>("embarques.activeTab", "containers");
   const [rotasVisiveis, setRotasVisiveis] = useState<number>(10);
 
   const COL_NAME_MAP: Record<string, string> = { __qty20: "20ft", __qty40: "40ft", __qty45: "45ft" };
@@ -1338,7 +1340,7 @@ const Embarques = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="containers" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5 h-auto">
             <TabsTrigger value="containers" className="gap-2">
               <Package className="h-4 w-4" />

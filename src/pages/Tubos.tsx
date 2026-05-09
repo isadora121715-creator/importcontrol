@@ -1,4 +1,5 @@
 import { useDeferredValue, useMemo, useRef, useState, useEffect } from "react";
+import { usePageState } from "@/hooks/usePageState";
 import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye, ArrowLeft, FileDown } from "lucide-react";
 import { usePedidos } from "@/hooks/usePedidos";
 import { DashboardCards } from "@/components/DashboardCards";
@@ -33,12 +34,12 @@ const Tubos = () => {
   } = usePedidos(activeCategory);
 
 
-  const [activeTab, setActiveTab] = useState<"overview" | "monthly">("overview");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [clienteFilter, setClienteFilter] = useState<string>("all");
-  const [fornecedorFilter, setFornecedorFilter] = useState<string>("all");
-  const [poFilter, setPoFilter] = useState<string>("all");
-  const [tipoFilter, setTipoFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = usePageState<"overview" | "monthly">("tubos.activeTab", "overview");
+  const [statusFilter, setStatusFilter] = usePageState<string>("tubos.statusFilter", "all");
+  const [clienteFilter, setClienteFilter] = usePageState<string>("tubos.clienteFilter", "all");
+  const [fornecedorFilter, setFornecedorFilter] = usePageState<string>("tubos.fornecedorFilter", "all");
+  const [poFilter, setPoFilter] = usePageState<string>("tubos.poFilter", "all");
+  const [tipoFilter, setTipoFilter] = usePageState<string>("tubos.tipoFilter", "all");
 
   const delayRef = useRef<HTMLDivElement>(null);
   const deferredData = useDeferredValue(data);

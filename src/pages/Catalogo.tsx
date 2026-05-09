@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from "react";
+import { usePageState } from "@/hooks/usePageState";
 import staticCatalogo from "@/data/catalogo-static.json";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -338,8 +339,8 @@ export default function Catalogo() {
       : (staticCatalogo as unknown as CatalogoItem[]);
 
   // ── filters ───────────────────────────────────────────────────────────────
-  const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<string>("Todas");
+  const [search, setSearch] = usePageState<string>("catalogo.search", "");
+  const [activeTab, setActiveTab] = usePageState<string>("catalogo.activeTab", "Todas");
 
   // ── dialog state ──────────────────────────────────────────────────────────
   const [dialogOpen, setDialogOpen]       = useState(false);
