@@ -37,29 +37,39 @@ export const analyzeFreight = createServerFn({ method: "POST" })
   .inputValidator((input) =>
     z
       .object({
-        peso: z.number().positive(),
-        largura: z.number().positive(),
-        altura: z.number().positive(),
-        comprimento: z.number().positive(),
+        peso: z.number().min(0),
+        cbm: z.number().positive().optional(),
+        largura: z.number().positive().optional(),
+        altura: z.number().positive().optional(),
+        comprimento: z.number().positive().optional(),
         modal: z.string().min(1).max(50),
         origem: z.string().max(80).optional(),
         destino: z.string().max(80).optional(),
         incoterm: z.string().max(20).optional(),
       })
+      .refine(
+        (d) => d.cbm != null || (d.largura != null && d.altura != null && d.comprimento != null),
+        { message: "Informe o CBM ou as três dimensões (largura, altura, comprimento)" },
+      )
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const volume = (data.largura * data.altura * data.comprimento) / 1_000_000;
+    const volume = data.cbm != null
+      ? data.cbm
+      : (data.largura! * data.altura! * data.comprimento!) / 1_000_000;
     const pesoCubado = volume * 167; // fator aéreo padrão
     const origemStr = data.origem ? `Origem: ${data.origem}` : "";
     const destinoStr = data.destino ? `Destino: ${data.destino}` : "";
     const incotermStr = data.incoterm ? `Incoterm: ${data.incoterm}` : "";
+    const volumeDescr = data.cbm != null
+      ? `CBM informado: ${data.cbm} m³`
+      : `${data.largura}×${data.altura}×${data.comprimento} cm`;
 
     const prompt = `Você é especialista em logística internacional. Analise a carga abaixo e responda SOMENTE com JSON válido — sem texto extra, sem markdown, sem comentários.
 
 DADOS DA CARGA:
-- Peso real: ${data.peso} kg
-- Volume: ${volume.toFixed(3)} m³ (${data.largura}×${data.altura}×${data.comprimento} cm)
+- Peso real: ${data.peso > 0 ? `${data.peso} kg` : "não informado"}
+- Volume: ${volume.toFixed(3)} m³ (${volumeDescr})
 - Peso cubado aéreo: ${pesoCubado.toFixed(0)} kg
 - Modal solicitado: ${data.modal}
 ${origemStr ? `\n${origemStr}` : ""}${destinoStr ? `\n${destinoStr}` : ""}${incotermStr ? `\n${incotermStr}` : ""}

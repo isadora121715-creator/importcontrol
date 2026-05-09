@@ -192,8 +192,10 @@ export function FreightAnalyzer() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<FreightResult | null>(null);
   const [rawFallback, setRawFallback] = useState<string>("");
+  const [inputMode, setInputMode] = useState<"dimensions" | "cbm">("dimensions");
   const [form, setForm] = useState({
     peso: "",
+    cbm: "",
     largura: "",
     altura: "",
     comprimento: "",
@@ -203,9 +205,11 @@ export function FreightAnalyzer() {
     incoterm: "",
   });
 
-  const volumeCbm = form.largura && form.altura && form.comprimento
-    ? ((Number(form.largura) * Number(form.altura) * Number(form.comprimento)) / 1_000_000).toFixed(4)
-    : null;
+  const volumeCbm = inputMode === "cbm"
+    ? (form.cbm ? Number(form.cbm).toFixed(4) : null)
+    : (form.largura && form.altura && form.comprimento
+        ? ((Number(form.largura) * Number(form.altura) * Number(form.comprimento)) / 1_000_000).toFixed(4)
+        : null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,10 +219,14 @@ export function FreightAnalyzer() {
     try {
       const res = await analyze({
         data: {
-          peso: Number(form.peso),
-          largura: Number(form.largura),
-          altura: Number(form.altura),
-          comprimento: Number(form.comprimento),
+          peso: Number(form.peso) || 0,
+          ...(inputMode === "cbm"
+            ? { cbm: Number(form.cbm) }
+            : {
+                largura: Number(form.largura),
+                altura: Number(form.altura),
+                comprimento: Number(form.comprimento),
+              }),
           modal: form.modal,
           origem: form.origem || undefined,
           destino: form.destino || undefined,
@@ -268,37 +276,84 @@ export function FreightAnalyzer() {
 
         {/* Form */}
         <form onSubmit={submit} className="space-y-4">
-          {/* Dimensões + peso */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-              Dados da Carga
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Peso (kg)</Label>
-                <Input type="number" step="0.01" required placeholder="0.00"
-                  value={form.peso} onChange={(e) => setForm({ ...form, peso: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Largura (cm)</Label>
-                <Input type="number" step="0.01" required placeholder="0"
-                  value={form.largura} onChange={(e) => setForm({ ...form, largura: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Altura (cm)</Label>
-                <Input type="number" step="0.01" required placeholder="0"
-                  value={form.altura} onChange={(e) => setForm({ ...form, altura: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Comprimento (cm)</Label>
-                <Input type="number" step="0.01" required placeholder="0"
-                  value={form.comprimento} onChange={(e) => setForm({ ...form, comprimento: e.target.value })} />
+          {/* Dados da Carga */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Dados da Carga
+              </p>
+              {/* Mode toggle */}
+              <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setInputMode("dimensions")}
+                  className={cn(
+                    "rounded-md px-3 py-1 font-medium transition-all",
+                    inputMode === "dimensions"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Dimensões
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode("cbm")}
+                  className={cn(
+                    "rounded-md px-3 py-1 font-medium transition-all",
+                    inputMode === "cbm"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  CBM direto
+                </button>
               </div>
             </div>
+
+            {inputMode === "dimensions" ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Peso (kg) <span className="opacity-50">(opcional)</span></Label>
+                  <Input type="number" step="0.01" placeholder="0.00"
+                    value={form.peso} onChange={(e) => setForm({ ...form, peso: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Largura (cm)</Label>
+                  <Input type="number" step="0.01" required placeholder="0"
+                    value={form.largura} onChange={(e) => setForm({ ...form, largura: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Altura (cm)</Label>
+                  <Input type="number" step="0.01" required placeholder="0"
+                    value={form.altura} onChange={(e) => setForm({ ...form, altura: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Comprimento (cm)</Label>
+                  <Input type="number" step="0.01" required placeholder="0"
+                    value={form.comprimento} onChange={(e) => setForm({ ...form, comprimento: e.target.value })} />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Peso (kg) <span className="opacity-50">(opcional)</span></Label>
+                  <Input type="number" step="0.01" placeholder="0.00"
+                    value={form.peso} onChange={(e) => setForm({ ...form, peso: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">CBM (m³)</Label>
+                  <Input type="number" step="0.001" required placeholder="Ex: 5.000"
+                    value={form.cbm} onChange={(e) => setForm({ ...form, cbm: e.target.value })} />
+                </div>
+              </div>
+            )}
+
             {volumeCbm && (
-              <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Ruler className="h-3 w-3" />
-                Volume calculado: <span className="font-semibold text-foreground">{volumeCbm} m³</span>
+                {inputMode === "cbm" ? "Volume:" : "Volume calculado:"}
+                <span className="font-semibold text-foreground">{volumeCbm} m³</span>
               </p>
             )}
           </div>
