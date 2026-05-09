@@ -142,17 +142,16 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
       .sort((a, b) => (b.criticos + b.atrasados) - (a.criticos + a.atrasados));
   }, [data]);
 
-  // Air freight margin analysis (nationalized x8)
-  const airFreightAnalysis = useMemo(() => {
+  // Air freight margin analysis — STEP 1: filter + sort ONCE using default peso.
+  // itemWeights is intentionally excluded so that editing a weight never reorders rows.
+  const airFreightBase = useMemo(() => {
     const FRETE_USD_KG = 1.0;
     const PESO_KG = pesoKgValue;
     const FATOR_NAC = 8;
 
     const statuses = ["crítico", "atrasado", "verificar aéreo", "alerta"];
     const matchStatus = (s: unknown) => typeof s === "string" ? statuses.includes(s.toLowerCase()) : false;
-    
-    // If a specific PO is selected, show ALL items from that PO
-    // Otherwise, find POs that have at least one critical/delayed item
+
     const matchingPOs = new Set<string>();
     if (activePo && activePo !== "all") {
       matchingPOs.add(activePo);
@@ -169,48 +168,48 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
       });
     }
 
-    // Include ALL items from matching POs (no price filter when PO is explicitly selected)
-    const items = data
+    return data
       .filter((d) => d.po && matchingPOs.has(d.po) && (activePo && activePo !== "all" ? true : (d.precoCompra != null && d.precoCompra > 0)))
       .map((d) => {
         const precoUnit = d.precoCompra ?? 0;
         const precoCliente = d.precoVenda ?? 0;
         const itemKey = `${d.pi}-${d.codigo}`;
-        const peso = itemWeights[itemKey] ?? PESO_KG;
 
         const nacionalizado = precoUnit * FATOR_NAC;
         const margem = nacionalizado > 0 ? precoCliente / nacionalizado : null;
         const fator = precoUnit > 0 ? precoCliente / precoUnit : null;
 
-        const freteUnit = FRETE_USD_KG * peso * FATOR_NAC;
-        const itemComFrete = precoUnit + freteUnit;
-        const nacionalizadoComFrete = itemComFrete * FATOR_NAC;
-        const novaMargem = nacionalizadoComFrete > 0 ? precoCliente / nacionalizadoComFrete : null;
-        const novoFator = itemComFrete > 0 ? precoCliente / itemComFrete : null;
+        // Sort key uses the global default peso — never per-item weights
+        const freteDefault = FRETE_USD_KG * PESO_KG * FATOR_NAC;
+        const itemComFreteDefault = precoUnit + freteDefault;
+        const novaMargemDefault = itemComFreteDefault * FATOR_NAC > 0
+          ? precoCliente / (itemComFreteDefault * FATOR_NAC)
+          : null;
 
-        return {
-          ...d,
-          precoUnit,
-          precoCliente,
-          nacionalizado,
-          margem,
-          fator,
-          pesoKg: peso,
-          freteUsdKg: freteUnit,
-          itemComFrete,
-          nacionalizadoComFrete,
-          novaMargem,
-          novoFator,
-          _itemKey: itemKey,
-        };
+        return { ...d, precoUnit, precoCliente, nacionalizado, margem, fator, _itemKey: itemKey, _sortKey: novaMargemDefault };
       })
-      .sort((a, b) => (b.novaMargem ?? -999) - (a.novaMargem ?? -999));
+      .sort((a, b) => (b._sortKey ?? -999) - (a._sortKey ?? -999));
+  }, [data, pesoKgValue, activePo]); // ← itemWeights intentionally absent
+
+  // STEP 2: apply per-item weights on top of the stable order — no re-sort.
+  const airFreightAnalysis = useMemo(() => {
+    const FRETE_USD_KG = 1.0;
+    const FATOR_NAC = 8;
+
+    const items = airFreightBase.map((d) => {
+      const peso = itemWeights[d._itemKey] ?? pesoKgValue;
+      const freteUnit = FRETE_USD_KG * peso * FATOR_NAC;
+      const itemComFrete = d.precoUnit + freteUnit;
+      const nacionalizadoComFrete = itemComFrete * FATOR_NAC;
+      const novaMargem = nacionalizadoComFrete > 0 ? d.precoCliente / nacionalizadoComFrete : null;
+      const novoFator = itemComFrete > 0 ? d.precoCliente / itemComFrete : null;
+      return { ...d, pesoKg: peso, freteUsdKg: freteUnit, itemComFrete, nacionalizadoComFrete, novaMargem, novoFator };
+    });
 
     const viable = items.filter((d) => d.novaMargem != null && d.novaMargem > 1);
     const notViable = items.filter((d) => d.novaMargem != null && d.novaMargem <= 1);
-
     return { items, viable, notViable };
-  }, [data, pesoKgValue, itemWeights, activePo]);
+  }, [airFreightBase, itemWeights, pesoKgValue]);
 
   // Critical payment priorities - items that are critical/delayed with highest values
   const criticalPayments = useMemo(() => {
@@ -552,8 +551,8 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {airFreightAnalysis.items.map((d, i) => (
-                      <TableRow key={i} className={
+                    {airFreightAnalysis.items.map((d) => (
+                      <TableRow key={d._itemKey} className={
                         d.novaMargem != null && d.novaMargem > 1.1 ? "bg-status-chegou/5" :
                         d.novaMargem != null && d.novaMargem > 1 ? "bg-status-verificar/5" :
                         "bg-status-critico/5"
@@ -577,13 +576,16 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                         <TableCell className="text-xs font-mono text-right">{d.fator != null ? d.fator.toFixed(2) : "—"}</TableCell>
                         <TableCell className="text-xs text-right">
                           <input
+                            key={`${d._itemKey}-${itemWeights[d._itemKey] ?? pesoKgValue}`}
                             type="number"
                             step="0.1"
                             min="0.1"
-                            value={itemWeights[d._itemKey] ?? pesoKgValue}
-                            onChange={(e) => {
-                              const v = Math.max(0.1, parseFloat(e.target.value) || 0.1);
-                              setItemWeights((prev) => ({ ...prev, [d._itemKey]: v }));
+                            defaultValue={itemWeights[d._itemKey] ?? pesoKgValue}
+                            onBlur={(e) => {
+                              const v = parseFloat(e.target.value);
+                              if (!isNaN(v) && v > 0) {
+                                setItemWeights((prev) => ({ ...prev, [d._itemKey]: v }));
+                              }
                             }}
                             className="w-16 h-6 text-xs text-right rounded border border-input bg-background px-1 font-mono"
                           />
