@@ -491,7 +491,7 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
           </TabsContent>
 
           {/* AIR FREIGHT MARGIN TAB */}
-          <TabsContent value="air-freight" className="max-h-[450px] space-y-3 overflow-auto">
+          <TabsContent value="air-freight" className="space-y-3 overflow-x-auto">
             {airFreightAnalysis.items.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Nenhum item crítico/atrasado para análise de frete aéreo 🎉</p>
             ) : (
@@ -513,6 +513,7 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                 <p className="text-xs text-muted-foreground">
                   Simulação: Custo nacionalizado (×8) sem e com frete aéreo (~1,00 USD/kg) — avalia viabilidade.
                 </p>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -616,6 +617,7 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </>
             )}
           </TabsContent>
