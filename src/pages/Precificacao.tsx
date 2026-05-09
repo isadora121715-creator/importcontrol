@@ -1212,8 +1212,6 @@ export default function Precificacao() {
               </div>
             </div>
           </div>
-          </div>
-
         </div>
 
         {/* ── Histórico de Cotações ────────────────────────────────────── */}
