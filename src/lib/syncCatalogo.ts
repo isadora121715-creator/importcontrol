@@ -12,6 +12,9 @@ export interface CatalogoItem {
   fornecedores: string[];   // lista de fornecedores únicos
   categorias: string[];     // Tubos | Válvulas | Conexões
   ultimaAtualizacao: string; // ISO date
+  // Display-only: todos os preços únicos encontrados nos pedidos (não persistidos no banco)
+  precosCompra?: number[];
+  precosVenda?: number[];
 }
 
 // ── conversão banco ↔ domínio ─────────────────────────────────────────────────
@@ -117,7 +120,12 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
   const now = new Date().toISOString();
   const byKey = new Map<string, CatalogoItem>();
 
-  // Primeira passagem: agrupa pedidos por chave
+  /** Adiciona um valor único a um array de números, ignorando 0 e NaN. */
+  const pushUnique = (arr: number[], val: number) => {
+    if (val > 0 && !arr.includes(val)) arr.push(val);
+  };
+
+  // Primeira passagem: agrupa pedidos por chave + coleta TODOS os preços únicos
   for (const row of pedidosRows) {
     const codigo    = (row.codigo    ?? "").trim();
     const descricao = (row.descricao ?? "").trim();
@@ -133,8 +141,16 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
       const item = byKey.get(key)!;
       if (fornecedor && !item.fornecedores.includes(fornecedor)) item.fornecedores.push(fornecedor);
       if (categoria  && !item.categorias.includes(categoria))   item.categorias.push(categoria);
-      if (precoCompra !== null && item.precoCompra === null) item.precoCompra = precoCompra;
-      if (precoVenda  !== null && item.precoVenda  === null) item.precoVenda  = precoVenda;
+      if (precoCompra !== null) {
+        if (item.precoCompra === null) item.precoCompra = precoCompra;
+        if (!item.precosCompra) item.precosCompra = [];
+        pushUnique(item.precosCompra, precoCompra);
+      }
+      if (precoVenda !== null) {
+        if (item.precoVenda === null) item.precoVenda = precoVenda;
+        if (!item.precosVenda) item.precosVenda = [];
+        pushUnique(item.precosVenda, precoVenda);
+      }
     } else {
       byKey.set(key, {
         id:                key,
@@ -142,6 +158,8 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
         descricao,
         precoCompra,
         precoVenda,
+        precosCompra:      precoCompra !== null && precoCompra > 0 ? [precoCompra] : [],
+        precosVenda:       precoVenda  !== null && precoVenda  > 0 ? [precoVenda]  : [],
         fornecedores:      fornecedor ? [fornecedor] : [],
         categorias:        categoria  ? [categoria]  : [],
         ultimaAtualizacao: now,
@@ -150,12 +168,22 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
   }
 
   // Segunda passagem: mescla itens manuais de catalogo_materiais
+  // O preço manual tem prioridade como valor primário mas os preços dos pedidos são mantidos
   for (const item of manualItems) {
     if (byKey.has(item.id)) {
       const existing = byKey.get(item.id)!;
-      // Preços manuais têm prioridade
-      if (item.precoCompra !== null) existing.precoCompra = item.precoCompra;
-      if (item.precoVenda  !== null) existing.precoVenda  = item.precoVenda;
+      // Preços manuais sobrescrevem o primário
+      if (item.precoCompra !== null) {
+        existing.precoCompra = item.precoCompra;
+        // Garante que o preço manual apareça no array (sem duplicar)
+        if (!existing.precosCompra) existing.precosCompra = [];
+        pushUnique(existing.precosCompra, item.precoCompra);
+      }
+      if (item.precoVenda !== null) {
+        existing.precoVenda = item.precoVenda;
+        if (!existing.precosVenda) existing.precosVenda = [];
+        pushUnique(existing.precosVenda, item.precoVenda);
+      }
       for (const f of item.fornecedores) {
         if (!existing.fornecedores.includes(f)) existing.fornecedores.push(f);
       }
@@ -165,8 +193,19 @@ export async function readCatalogoComPedidos(): Promise<CatalogoItem[]> {
       existing.ultimaAtualizacao = item.ultimaAtualizacao;
     } else {
       // Item adicionado manualmente (não vem de pedidos)
-      byKey.set(item.id, item);
+      const manualWithArrays = {
+        ...item,
+        precosCompra: item.precoCompra !== null && item.precoCompra > 0 ? [item.precoCompra] : [],
+        precosVenda:  item.precoVenda  !== null && item.precoVenda  > 0 ? [item.precoVenda]  : [],
+      };
+      byKey.set(item.id, manualWithArrays);
     }
+  }
+
+  // Ordena os arrays de preços em ordem crescente para exibição consistente
+  for (const item of byKey.values()) {
+    item.precosCompra?.sort((a, b) => a - b);
+    item.precosVenda?.sort((a, b) => a - b);
   }
 
   return Array.from(byKey.values());

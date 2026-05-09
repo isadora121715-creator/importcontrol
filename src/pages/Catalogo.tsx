@@ -45,6 +45,46 @@ function fmtVenda(val: number | null): string {
   return `R$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Célula de preço: se houver múltiplos valores únicos, exibe todos empilhados. */
+function PriceCell({
+  primary,
+  all,
+  fmt,
+  colorClass = "",
+}: {
+  primary: number | null;
+  all?: number[];
+  fmt: (v: number | null) => string;
+  colorClass?: string;
+}) {
+  const unique = Array.from(new Set((all ?? []).filter((v) => v > 0))).sort((a, b) => a - b);
+
+  if (unique.length <= 1) {
+    return (
+      <span className={`tabular-nums font-medium ${colorClass}`}>
+        {fmt(primary)}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      {unique.map((v, idx) => (
+        <span
+          key={v}
+          className={`tabular-nums ${
+            idx === 0
+              ? `font-semibold ${colorClass}`
+              : "text-[11px] text-muted-foreground"
+          }`}
+        >
+          {fmt(v)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function makeKey(codigo: string, descricao: string): string {
   if (codigo) return codigo.trim().toUpperCase();
   return descricao.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 60);
@@ -94,15 +134,24 @@ function exportExcel(items: CatalogoItem[]) {
   const colWidths = [{ wch: 18 }, { wch: 52 }, { wch: 20 }, { wch: 18 }, { wch: 32 }, { wch: 18 }, { wch: 20 }];
 
   const toRows = (list: CatalogoItem[]) =>
-    list.map((i) => [
-      i.codigo || "",
-      i.descricao || "",
-      i.precoCompra ?? "",
-      i.precoVenda  ?? "",
-      i.fornecedores.join(", ") || "",
-      i.categorias.join(", ") || "",
-      i.ultimaAtualizacao ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR") : "",
-    ]);
+    list.map((i) => {
+      // Para Excel: se houver múltiplos preços, exibe todos separados por " | "
+      const compraExcel = i.precosCompra && i.precosCompra.length > 1
+        ? i.precosCompra.map((v) => `$ ${v.toFixed(2)}`).join(" | ")
+        : (i.precoCompra ?? "");
+      const vendaExcel = i.precosVenda && i.precosVenda.length > 1
+        ? i.precosVenda.map((v) => `R$ ${v.toFixed(2)}`).join(" | ")
+        : (i.precoVenda ?? "");
+      return [
+        i.codigo || "",
+        i.descricao || "",
+        compraExcel,
+        vendaExcel,
+        i.fornecedores.join(", ") || "",
+        i.categorias.join(", ") || "",
+        i.ultimaAtualizacao ? new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR") : "",
+      ];
+    });
 
   const addSheet = (name: string, list: CatalogoItem[]) => {
     const ws = XLSX.utils.aoa_to_sheet([HEADER, ...toRows(list)]);
@@ -215,14 +264,22 @@ async function exportPDF(items: CatalogoItem[]) {
 
     drawHeader(cat);
 
-    const tableBody = catItems.map((i) => [
-      i.codigo || "—",
-      i.descricao || "—",
-      fmtPreco(i.precoCompra),
-      fmtVenda(i.precoVenda),
-      i.fornecedores.join("\n") || "—",
-      new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR"),
-    ]);
+    const tableBody = catItems.map((i) => {
+      const compraPdf = i.precosCompra && i.precosCompra.length > 1
+        ? i.precosCompra.map(fmtPreco).join("\n")
+        : fmtPreco(i.precoCompra);
+      const vendaPdf = i.precosVenda && i.precosVenda.length > 1
+        ? i.precosVenda.map(fmtVenda).join("\n")
+        : fmtVenda(i.precoVenda);
+      return [
+        i.codigo || "—",
+        i.descricao || "—",
+        compraPdf,
+        vendaPdf,
+        i.fornecedores.join("\n") || "—",
+        new Date(i.ultimaAtualizacao).toLocaleDateString("pt-BR"),
+      ];
+    });
 
     autoTable(doc, {
       startY: 26,
@@ -835,11 +892,20 @@ function CatalogTable({
                 <TableCell className="max-w-xs" title={item.descricao}>
                   <span className="line-clamp-2">{item.descricao || <span className="text-muted-foreground italic">—</span>}</span>
                 </TableCell>
-                <TableCell className="text-right tabular-nums font-medium">
-                  {fmtPreco(item.precoCompra)}
+                <TableCell className="text-right">
+                  <PriceCell
+                    primary={item.precoCompra}
+                    all={item.precosCompra}
+                    fmt={fmtPreco}
+                  />
                 </TableCell>
-                <TableCell className="text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
-                  {fmtVenda(item.precoVenda)}
+                <TableCell className="text-right">
+                  <PriceCell
+                    primary={item.precoVenda}
+                    all={item.precosVenda}
+                    fmt={fmtVenda}
+                    colorClass="text-emerald-600 dark:text-emerald-400"
+                  />
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
