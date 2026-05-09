@@ -66,7 +66,7 @@ const CONTAINERS: ContainerInfo[] = [
     capacidade: "33 m³",
     pesoMax: "18 toneladas",
     tempo: "40-50 dias",
-    valor: "US$ 1.200 - US$ 1.800",
+    valor: "US$ 2.800 - US$ 4.200",
   },
   {
     id: "40ft",
@@ -77,7 +77,7 @@ const CONTAINERS: ContainerInfo[] = [
     capacidade: "67 m³",
     pesoMax: "28 toneladas",
     tempo: "40-50 dias",
-    valor: "US$ 2.000 - US$ 3.000",
+    valor: "US$ 3.200 - US$ 5.000",
   },
   {
     id: "45ft",
@@ -88,7 +88,7 @@ const CONTAINERS: ContainerInfo[] = [
     capacidade: "76 m³",
     pesoMax: "30 toneladas",
     tempo: "40-50 dias",
-    valor: "US$ 2.500 - US$ 3.500",
+    valor: "US$ 3.800 - US$ 5.800",
   },
   {
     id: "lcl",
@@ -99,7 +99,7 @@ const CONTAINERS: ContainerInfo[] = [
     capacidade: "Até 18-25 m³",
     pesoMax: "Até 15 toneladas",
     tempo: "35-45 dias",
-    valor: "US$ 400 - US$ 600 / m³",
+    valor: "US$ 80 - US$ 180 / m³",
   },
   {
     id: "aereo",
@@ -110,7 +110,7 @@ const CONTAINERS: ContainerInfo[] = [
     capacidade: "Conforme necessário",
     pesoMax: "Conforme necessário",
     tempo: "5-10 dias",
-    valor: "US$ 3.50 - US$ 8.00 / kg",
+    valor: "US$ 7,00 - US$ 12,00 / kg",
   },
 ];
 
@@ -208,24 +208,24 @@ type FreteFCL = { rota: string; valor: string; capacidade: string; tempo: string
 
 const FRETES_FCL_DEFAULT: FreteFCL[] = [
   // 20ft
-  { rota: "Shangai → Santos", valor: "US$ 1.200-1.800", capacidade: "18-20 toneladas", tempo: "40-50 dias", tipo: "20ft" },
-  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 1.250-1.850", capacidade: "18-20 toneladas", tempo: "41-51 dias", tipo: "20ft" },
-  { rota: "Shangai → Suape", valor: "US$ 1.300-1.900", capacidade: "18-20 toneladas", tempo: "42-52 dias", tipo: "20ft" },
-  { rota: "Roterdã → Santos", valor: "US$ 1.000-1.500", capacidade: "18-20 toneladas", tempo: "45-55 dias", tipo: "20ft" },
-  { rota: "Miami → Santos", valor: "US$ 800-1.200", capacidade: "18-20 toneladas", tempo: "8-12 dias", tipo: "20ft" },
-  { rota: "Miami → Suape", valor: "US$ 850-1.250", capacidade: "18-20 toneladas", tempo: "10-14 dias", tipo: "20ft" },
+  { rota: "Shangai → Santos", valor: "US$ 2.800-4.200", capacidade: "18-20 toneladas", tempo: "40-50 dias", tipo: "20ft" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.900-4.300", capacidade: "18-20 toneladas", tempo: "41-51 dias", tipo: "20ft" },
+  { rota: "Shangai → Suape", valor: "US$ 3.000-4.400", capacidade: "18-20 toneladas", tempo: "42-52 dias", tipo: "20ft" },
+  { rota: "Roterdã → Santos", valor: "US$ 1.500-2.800", capacidade: "18-20 toneladas", tempo: "45-55 dias", tipo: "20ft" },
+  { rota: "Miami → Santos", valor: "US$ 1.200-1.900", capacidade: "18-20 toneladas", tempo: "8-12 dias", tipo: "20ft" },
+  { rota: "Miami → Suape", valor: "US$ 1.300-2.000", capacidade: "18-20 toneladas", tempo: "10-14 dias", tipo: "20ft" },
   // 40ft
-  { rota: "Shangai → Santos", valor: "US$ 2.000-3.000", capacidade: "26-28 toneladas", tempo: "40-50 dias", tipo: "40ft" },
-  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.100-3.100", capacidade: "26-28 toneladas", tempo: "41-51 dias", tipo: "40ft" },
-  { rota: "Shangai → Suape", valor: "US$ 2.200-3.200", capacidade: "26-28 toneladas", tempo: "42-52 dias", tipo: "40ft" },
-  { rota: "Roterdã → Santos", valor: "US$ 1.700-2.500", capacidade: "26-28 toneladas", tempo: "45-55 dias", tipo: "40ft" },
-  { rota: "Miami → Santos", valor: "US$ 1.400-2.000", capacidade: "26-28 toneladas", tempo: "8-12 dias", tipo: "40ft" },
-  { rota: "Miami → Suape", valor: "US$ 1.500-2.100", capacidade: "26-28 toneladas", tempo: "10-14 dias", tipo: "40ft" },
+  { rota: "Shangai → Santos", valor: "US$ 3.200-5.000", capacidade: "26-28 toneladas", tempo: "40-50 dias", tipo: "40ft" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 3.300-5.100", capacidade: "26-28 toneladas", tempo: "41-51 dias", tipo: "40ft" },
+  { rota: "Shangai → Suape", valor: "US$ 3.400-5.200", capacidade: "26-28 toneladas", tempo: "42-52 dias", tipo: "40ft" },
+  { rota: "Roterdã → Santos", valor: "US$ 2.200-4.000", capacidade: "26-28 toneladas", tempo: "45-55 dias", tipo: "40ft" },
+  { rota: "Miami → Santos", valor: "US$ 2.000-3.200", capacidade: "26-28 toneladas", tempo: "8-12 dias", tipo: "40ft" },
+  { rota: "Miami → Suape", valor: "US$ 2.100-3.300", capacidade: "26-28 toneladas", tempo: "10-14 dias", tipo: "40ft" },
   // 45ft HC
-  { rota: "Shangai → Santos", valor: "US$ 2.500-3.500", capacidade: "28-30 toneladas", tempo: "40-50 dias", tipo: "45ft HC" },
-  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 2.600-3.600", capacidade: "28-30 toneladas", tempo: "41-51 dias", tipo: "45ft HC" },
-  { rota: "Roterdã → Santos", valor: "US$ 2.200-3.000", capacidade: "28-30 toneladas", tempo: "45-55 dias", tipo: "45ft HC" },
-  { rota: "Miami → Santos", valor: "US$ 1.800-2.500", capacidade: "28-30 toneladas", tempo: "8-12 dias", tipo: "45ft HC" },
+  { rota: "Shangai → Santos", valor: "US$ 3.800-5.800", capacidade: "28-30 toneladas", tempo: "40-50 dias", tipo: "45ft HC" },
+  { rota: "Shangai → Itajaí/Navegantes", valor: "US$ 3.900-5.900", capacidade: "28-30 toneladas", tempo: "41-51 dias", tipo: "45ft HC" },
+  { rota: "Roterdã → Santos", valor: "US$ 2.800-4.500", capacidade: "28-30 toneladas", tempo: "45-55 dias", tipo: "45ft HC" },
+  { rota: "Miami → Santos", valor: "US$ 2.500-3.800", capacidade: "28-30 toneladas", tempo: "8-12 dias", tipo: "45ft HC" },
 ];
 
 type FreteIntl = Record<string, string | number>;
@@ -1136,22 +1136,22 @@ const Embarques = () => {
     {
       id: "FCL20",   nome: "20ft Standard",
       c: 589, l: 234, a: 239,   // comprimento × largura × altura interna (cm)
-      cbm: 28, maxKg: 21_700, baseUSD: 1_500,
+      cbm: 28, maxKg: 21_700, baseUSD: 3_000,
     },
     {
       id: "FCL40",   nome: "40ft Standard",
       c: 1203, l: 234, a: 239,
-      cbm: 58, maxKg: 26_500, baseUSD: 2_500,
+      cbm: 58, maxKg: 26_500, baseUSD: 4_000,
     },
     {
       id: "FCL40HC", nome: "40ft High Cube",
       c: 1203, l: 234, a: 270,  // HC: 30 cm mais alto
-      cbm: 72, maxKg: 26_460, baseUSD: 2_800,
+      cbm: 72, maxKg: 26_460, baseUSD: 4_500,
     },
     {
       id: "FCL45HC", nome: "45ft High Cube",
       c: 1356, l: 234, a: 270,
-      cbm: 86, maxKg: 27_600, baseUSD: 3_200,
+      cbm: 86, maxKg: 27_600, baseUSD: 5_000,
     },
   ] as const;
 
@@ -1171,7 +1171,7 @@ const Embarques = () => {
 
     // ── LCL ──────────────────────────────────────────────────────────────
     const wm      = Math.max(volume, peso / 1000);        // W/M (ton ou CBM)
-    const lclBase = wm * 520 * USD;                       // ~USD 520/W/M típico
+    const lclBase = wm * 600 * USD;                       // ~USD 600/W/M (mai/2026)
 
     // ── FCL ──────────────────────────────────────────────────────────────
     const fclOpcoes = TIPOS_FCL.map((spec) => {
@@ -1219,7 +1219,7 @@ const Embarques = () => {
 
     // ── Aéreo ─────────────────────────────────────────────────────────────
     const pesoTaxado = Math.max(peso, volume * 167); // IATA: 1 m³ = 167 kg
-    const aereoBase  = pesoTaxado * 7.5 * USD;       // ~USD 7.5/kg taxado
+    const aereoBase  = pesoTaxado * 9.0 * USD;       // ~USD 9.0/kg taxado (mai/2026)
 
     return [
       {
