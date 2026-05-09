@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { AlertTriangle, TrendingUp, TrendingDown, DollarSign, Truck, RotateCcw, Zap, Package, Download } from "lucide-react";
 import { downloadDelayReport } from "@/lib/downloadDelayReport";
@@ -53,6 +53,31 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
   const [pesoKgValue, setPesoKgValue] = useState(1.0);
   const [itemWeights, setItemWeights] = useState<Record<string, number>>({});
   const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null);
+
+  // Refs for the synchronized top-scrollbar on the air freight table
+  const airTableRef = useRef<HTMLDivElement>(null);
+  const airTopScrollRef = useRef<HTMLDivElement>(null);
+  const syncingFromTable = useRef(false);
+  const syncingFromTop   = useRef(false);
+
+  const onAirTableScroll = useCallback(() => {
+    if (syncingFromTop.current) return;
+    syncingFromTable.current = true;
+    if (airTopScrollRef.current && airTableRef.current) {
+      airTopScrollRef.current.scrollLeft = airTableRef.current.scrollLeft;
+    }
+    syncingFromTable.current = false;
+  }, []);
+
+  const onAirTopScroll = useCallback(() => {
+    if (syncingFromTable.current) return;
+    syncingFromTop.current = true;
+    if (airTableRef.current && airTopScrollRef.current) {
+      airTableRef.current.scrollLeft = airTopScrollRef.current.scrollLeft;
+    }
+    syncingFromTop.current = false;
+  }, []);
+
   // Price analysis
   const priceAnalysis = useMemo(() => {
     const withPrices = data.filter((d) => d.precoCompra != null && d.precoCompra > 0);
@@ -513,7 +538,20 @@ export function SmartAlerts({ data, activePo }: SmartAlertsProps) {
                 <p className="text-xs text-muted-foreground">
                   Simulação: Custo nacionalizado (×8) sem e com frete aéreo (~1,00 USD/kg) — avalia viabilidade.
                 </p>
-                <div className="max-h-[600px] overflow-auto rounded-md border">
+                {/* Mirror scrollbar — stays at top so horizontal scroll is always reachable */}
+                <div
+                  ref={airTopScrollRef}
+                  onScroll={onAirTopScroll}
+                  className="overflow-x-scroll overflow-y-hidden h-3"
+                  style={{ scrollbarWidth: "thin" }}
+                >
+                  <div style={{ minWidth: "1600px", height: "1px" }} />
+                </div>
+                <div
+                  ref={airTableRef}
+                  onScroll={onAirTableScroll}
+                  className="max-h-[600px] overflow-auto rounded-md border"
+                >
                 <Table className="min-w-[1600px]">
                   <TableHeader>
                     <TableRow>
