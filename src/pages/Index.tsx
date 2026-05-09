@@ -179,7 +179,7 @@ const Index = () => {
               <Package className="h-5 w-5 text-primary" />
               Dashboard
             </h2>
-            <div className="flex gap-4">
+            <div className="flex flex-col lg:flex-row gap-4">
               <FilterSidebar
                 statusFilter={statusFilter}
                 setStatusFilter={setStatusFilter}
@@ -200,8 +200,8 @@ const Index = () => {
               />
 
               <div className="flex-1 min-w-0 space-y-6">
-                <div className="flex items-center justify-between rounded-lg border bg-card p-3 shadow-sm">
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground flex-1 min-w-0">
                     {fileName && (
                       <span className="flex items-center gap-1">
                         <FileSpreadsheet className="h-3 w-3" />
@@ -227,7 +227,7 @@ const Index = () => {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => {
                         let ok = false;
