@@ -15,6 +15,7 @@ import {
   DownloadCloud,
   ChevronDown,
   FileDown,
+  Send,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -1113,6 +1114,8 @@ const Embarques = () => {
 
 
   // Simulador
+  const [simPO, setSimPO] = useState("");
+  const [simFornecedor, setSimFornecedor] = useState("");
   const [tipoFrete, setTipoFrete] = useState("Marítimo");
   const [modalidade, setModalidade] = useState("LCL");
   const [pesoReal, setPesoReal] = useState("");
@@ -1322,6 +1325,106 @@ const Embarques = () => {
   }, [simQtd20, simQtd40, simQtd45]);
 
   const selected = CONTAINERS.find((c) => c.id === selectedContainer)!;
+
+  // ── Exporta solicitação de cotação para o agente de frete ─────────────────
+  const exportCotacaoAgente = () => {
+    const doc = new jsPDF();
+    const today = new Date().toLocaleDateString("pt-BR");
+    const pageW = doc.internal.pageSize.getWidth();
+
+    // Cabeçalho
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Solicitação de Cotação de Frete", pageW / 2, 20, { align: "center" });
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100);
+    doc.text(`Data: ${today}`, pageW / 2, 28, { align: "center" });
+    doc.setTextColor(0);
+
+    let y = 40;
+
+    // Dados da remessa
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Dados da Remessa", 14, y);
+    y += 7;
+
+    const dadosRows: [string, string][] = [];
+    if (simPO)        dadosRows.push(["Número da PO",   simPO]);
+    if (simFornecedor) dadosRows.push(["Fornecedor",    simFornecedor]);
+    dadosRows.push(["Origem",  origem || "—"]);
+    dadosRows.push(["Destino", destino || "—"]);
+
+    const volume = Number(cbm || 0) ||
+      (Number(comprimento) * Number(largura) * Number(altura)) / 1_000_000 || 0;
+    if (Number(pesoReal) > 0) dadosRows.push(["Peso Real", `${pesoReal} kg`]);
+    if (volume > 0)           dadosRows.push(["Volume (CBM)", `${volume.toFixed(3)} m³`]);
+    if (comprimento && largura && altura && !Number(cbm))
+      dadosRows.push(["Dimensões", `${comprimento} × ${largura} × ${altura} cm`]);
+    if (containerObs)  dadosRows.push(["Containers sugeridos", containerObs]);
+
+    autoTable(doc, {
+      startY: y,
+      body: dadosRows.map(([k, v]) => [k, v]),
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 60 }, 1: { cellWidth: "auto" } },
+      styles: { fontSize: 10, cellPadding: 3 },
+      theme: "striped",
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // Cotações estimadas
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Cotações Estimadas (referência interna)", 14, y);
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(120);
+    doc.text("Valores calculados automaticamente. Solicitar confirmação de tarifa ao agente.", 14, y + 4);
+    doc.setTextColor(0);
+    y += 8;
+
+    const cotRows = cotacoes
+      .filter((o) => o.base > 0)
+      .map((o) => [
+        o.nome,
+        o.qtdContainers > 0 ? String(o.qtdContainers) : "—",
+        `R$ ${o.base.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+        melhor?.id === o.id ? "✓ Sugerida" : "",
+      ]);
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Modalidade", "Qtd Containers", "Frete Base Est.", "Recomendação"]],
+      body: cotRows,
+      headStyles: { fillColor: [41, 98, 180], fontSize: 9 },
+      styles: { fontSize: 9, cellPadding: 3 },
+      theme: "grid",
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // Rodapé / instruções ao agente
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(80);
+    const instrucoes = [
+      "Por favor, enviar cotação detalhada com:",
+      "  • Valor do frete (USD e BRL)",
+      "  • Tempo de trânsito estimado",
+      "  • Validade da tarifa",
+      "  • Condições especiais (se aplicável)",
+    ];
+    instrucoes.forEach((line) => {
+      doc.text(line, 14, y);
+      y += 5;
+    });
+
+    const poLabel = simPO ? `_PO${simPO}` : "";
+    doc.save(`Cotacao_Frete${poLabel}_${today.replace(/\//g, "-")}.pdf`);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -2159,10 +2262,34 @@ const Embarques = () => {
                   Internacional
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Calcule cotações de frete aéreo ou marítimo em tempo real
+                  Calcule cotações de frete aéreo ou marítimo. Basta informar o CBM para gerar uma cotação.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Identificação da remessa */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2 border-b">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Número da PO <span className="text-[10px]">(opcional)</span>
+                    </label>
+                    <Input
+                      value={simPO}
+                      placeholder="Ex: PO-2024-001"
+                      onChange={(e) => setSimPO(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Fornecedor <span className="text-[10px]">(opcional)</span>
+                    </label>
+                    <Input
+                      value={simFornecedor}
+                      placeholder="Nome do fornecedor"
+                      onChange={(e) => setSimFornecedor(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs text-muted-foreground mb-1 block">
@@ -2198,7 +2325,21 @@ const Embarques = () => {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground mb-1 block">
-                      Peso Real (kg)
+                      CBM (m³) <span className="text-primary font-medium">— suficiente para cotar</span>
+                    </label>
+                    <Input
+                      type="number"
+                      value={cbm}
+                      placeholder="Ex: 5.0"
+                      onChange={(e) => setCbm(e.target.value)}
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Informe o CBM ou as dimensões abaixo
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Peso Real (kg) <span className="text-[10px]">(opcional)</span>
                     </label>
                     <Input
                       type="number"
@@ -2206,20 +2347,6 @@ const Embarques = () => {
                       placeholder="0"
                       onChange={(e) => setPesoReal(e.target.value)}
                     />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">
-                      CBM (m³) - Opcional
-                    </label>
-                    <Input
-                      type="number"
-                      value={cbm}
-                      placeholder="0"
-                      onChange={(e) => setCbm(e.target.value)}
-                    />
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Se preenchido, ignora as dimensões
-                    </p>
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground mb-1 block">
@@ -2437,11 +2564,24 @@ const Embarques = () => {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-8">
-                    Preencha o peso e dimensões para calcular as cotações de frete
+                    Informe o CBM ou as dimensões da carga para calcular as cotações
                   </p>
                 )}
               </CardContent>
             </Card>
+
+            {/* Botão salvar para agente */}
+            {melhor && (
+              <div className="flex justify-end">
+                <Button
+                  onClick={exportCotacaoAgente}
+                  className="gap-2"
+                >
+                  <Send className="h-4 w-4" />
+                  Salvar Cotação para Agente (PDF)
+                </Button>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>
