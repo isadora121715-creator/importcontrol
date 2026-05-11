@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+﻿import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   DollarSign, Percent, Trash2, TrendingUp, Search, BookmarkPlus,
   ChevronDown, ChevronUp, Building2, Package, Clock, Star, X,
@@ -50,36 +50,9 @@ interface CotacaoSalva {
   observacao: string;
 }
 
-interface VendaItem {
-  id: string;
-  descricao: string;
-  fornecedor: string;
-  unidade: string;
-  precoCompraUSD: string;
-  qtd: string;
-  freteUSD: string;
-  impostoPct: string;
-  cambio: string;
-  precoVendaBRL: string;
-}
-
 // ─────────────────────────────────────────────
 // Constants / helpers
 // ─────────────────────────────────────────────
-
-const VENDA_STORAGE_KEY = "embarques.simulador_venda.v1";
-
-const FORM_EMPTY: Omit<VendaItem, "id"> = {
-  descricao: "",
-  fornecedor: "",
-  unidade: "UN",
-  precoCompraUSD: "",
-  qtd: "1",
-  freteUSD: "",
-  impostoPct: "",
-  cambio: "5.20",
-  precoVendaBRL: "",
-};
 
 function cotacoesKey(userId: string) {
   return `importcontrol.cotacoes.v2.${userId}`;
@@ -96,26 +69,6 @@ function readCotacoes(userId: string): CotacaoSalva[] {
 
 function saveCotacoes(userId: string, items: CotacaoSalva[]) {
   localStorage.setItem(cotacoesKey(userId), JSON.stringify(items));
-}
-
-function calcVenda(item: VendaItem, margemPct: number, fatorAlvo: number) {
-  const qtd       = Number(item.qtd)           || 1;
-  const compra    = Number(item.precoCompraUSD) || 0;
-  const frete     = Number(item.freteUSD)       || 0;
-  const imposto   = Number(item.impostoPct)     || 0;
-  const cambio    = Number(item.cambio)         || 5.20;
-  const vendaUser = Number(item.precoVendaBRL)  || 0;
-
-  const custoUnitUSD = compra + frete / qtd;
-  const custoUnitBRL = custoUnitUSD * cambio * (1 + imposto / 100);
-  const vendaMinBRL  = custoUnitBRL / (1 - margemPct / 100);
-  const margemReal   = vendaUser > 0 ? ((vendaUser - custoUnitBRL) / vendaUser) * 100 : null;
-  const abaixoMinimo = vendaUser > 0 && vendaUser < vendaMinBRL;
-  // Fator = Preço Venda (R$) / Preço Compra (USD). Ex.: 584,56 / 48,71 ≈ 12
-  const fatorReal     = vendaUser > 0 && compra > 0 ? vendaUser / compra : null;
-  const vendaPorFator = compra > 0 && fatorAlvo > 0 ? compra * fatorAlvo : null;
-
-  return { qtd, custoUnitUSD, custoUnitBRL, custoTotalBRL: custoUnitBRL * qtd, vendaMinBRL, vendaTotalMinBRL: vendaMinBRL * qtd, margemReal, abaixoMinimo, fatorReal, vendaPorFator };
 }
 
 function calcCotacao(
@@ -363,60 +316,6 @@ export default function Precificacao() {
   const [fator, setFator] = useState("12");
   const fatorNum = Number(fator) || 12;
 
-  // ── Simulador de itens ──────────────────────────────────────────────
-  const [vendaItems, setVendaItems] = useState<VendaItem[]>(() => {
-    try {
-      const raw = window.localStorage.getItem(VENDA_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as VendaItem[]) : [];
-    } catch { return []; }
-  });
-  const [vendaForm, setVendaForm] = useState<Omit<VendaItem, "id">>(FORM_EMPTY);
-  const [vendaSearch, setVendaSearch] = useState("");
-  const [vendaShowDropdown, setVendaShowDropdown] = useState(false);
-  const vendaSearchRef = useRef<HTMLDivElement>(null);
-  const { results: vendaResults, loading: vendaLoading } = useProductSearch(vendaSearch);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (vendaSearchRef.current && !vendaSearchRef.current.contains(e.target as Node)) {
-        setVendaShowDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const handleSelectVendaProduct = (item: CatalogoItem) => {
-    const desc = item.codigo ? `${item.codigo} - ${item.descricao}` : item.descricao;
-    setVendaForm((f) => ({
-      ...f,
-      descricao: desc,
-      fornecedor: item.fornecedores[0] ?? f.fornecedor,
-      unidade: f.unidade || "UN",
-      precoCompraUSD: item.preco_compra != null ? String(item.preco_compra) : f.precoCompraUSD,
-      precoVendaBRL:  item.preco_venda  != null ? String(item.preco_venda)  : f.precoVendaBRL,
-    }));
-    setVendaSearch(desc);
-    setVendaShowDropdown(false);
-  };
-
-  const saveItems = (items: VendaItem[]) => {
-    setVendaItems(items);
-    window.localStorage.setItem(VENDA_STORAGE_KEY, JSON.stringify(items));
-  };
-
-  const addItem = () => {
-    if (!vendaForm.descricao || !vendaForm.precoCompraUSD) return;
-    saveItems([...vendaItems, { ...vendaForm, id: Date.now().toString() }]);
-    setVendaForm(FORM_EMPTY);
-  };
-
-  const removeItem = (id: string) => saveItems(vendaItems.filter((i) => i.id !== id));
-
-  const calcs   = vendaItems.map((item) => ({ item, c: calcVenda(item, margemNum, fatorNum) }));
-  const totalCusto    = calcs.reduce((s, { c }) => s + c.custoTotalBRL, 0);
-  const totalVendaMin = calcs.reduce((s, { c }) => s + c.vendaTotalMinBRL, 0);
-
   // ── Calculadoras rápidas ────────────────────────────────────────────
   const [modoA_venda,   setModoA_venda]   = useState("");
   const [modoA_cambio,  setModoA_cambio]  = useState("5.20");
@@ -636,7 +535,7 @@ export default function Precificacao() {
             <div>
               <h1 className="text-2xl font-bold">Precificação</h1>
               <p className="text-sm text-muted-foreground">
-                Simulador de preço de venda, cotação por produto e análise de margem
+                Cotação por produto, calculadoras rápidas e análise de margem
               </p>
             </div>
           </div>
@@ -1366,29 +1265,6 @@ export default function Precificacao() {
                                       </Button>
                                       <Button
                                         size="sm" variant="ghost"
-                                        className="h-6 text-[10px] px-2 text-muted-foreground"
-                                        onClick={() => {
-                                          if (c.precoCompraUSD != null) {
-                                            saveItems([...vendaItems, {
-                                              id: Date.now().toString(),
-                                              descricao: c.codigo ? `${c.codigo} - ${c.produto}` : c.produto,
-                                              fornecedor: c.fornecedor ?? "",
-                                              unidade: "UN",
-                                              precoCompraUSD: String(c.precoCompraUSD),
-                                              qtd: String(c.qtd),
-                                              freteUSD: String(c.freteUSD),
-                                              impostoPct: String(c.impostoPct),
-                                              cambio: String(c.cambio),
-                                              precoVendaBRL: c.precoVendaBRL != null ? String(c.precoVendaBRL) : "",
-                                            }]);
-                                            toast.success("Item adicionado ao simulador.");
-                                          }
-                                        }}
-                                      >
-                                        + Simulador
-                                      </Button>
-                                      <Button
-                                        size="sm" variant="ghost"
                                         className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
                                         onClick={() => handleDeleteCotacao(c.id)}
                                       >
@@ -1408,208 +1284,6 @@ export default function Precificacao() {
               )}
             </div>
           )}
-        </div>
-
-        {/* ── Simulador de Preço de Venda ─────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-          <div className="absolute inset-x-0 top-0 h-[2.5px] bg-gradient-to-r from-primary to-cyan-500" />
-          <div className="p-5 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                <DollarSign className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold">Simulador de Preço de Venda</h2>
-                <p className="text-xs text-muted-foreground">
-                  Calcule o preço mínimo de venda com base no custo de compra e despesas
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-5 pb-5 space-y-4">
-            {/* KPIs */}
-            {vendaItems.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { label: "Itens cadastrados", value: String(vendaItems.length), color: "text-primary" },
-                  { label: "Custo total (R$)", value: totalCusto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), color: "text-foreground" },
-                  { label: "Venda mínima total", value: totalVendaMin.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), color: "text-primary" },
-                  { label: "Margem mínima", value: `${margemNum}%`, color: "text-emerald-500" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="rounded-xl border border-border/60 bg-card p-3">
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className={cn("text-xl font-bold mt-0.5 num", color)}>{value}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Add item form */}
-            <div className="rounded-lg border border-border/40 p-4 space-y-3 bg-muted/20">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Adicionar item</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="md:col-span-2">
-                  <label className="text-xs text-muted-foreground mb-1 block">Descrição / Código</label>
-                  <div ref={vendaSearchRef} className="relative">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                      <Input
-                        placeholder="Pesquise por código ou descrição..."
-                        value={vendaSearch}
-                        className="pl-8"
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setVendaSearch(v);
-                          setVendaForm((f) => ({ ...f, descricao: v }));
-                          setVendaShowDropdown(true);
-                        }}
-                        onFocus={() => setVendaShowDropdown(true)}
-                        onKeyDown={(e) => e.key === "Enter" && addItem()}
-                      />
-                    </div>
-                    {vendaShowDropdown && vendaSearch.trim().length >= 2 && (
-                      <div className="absolute z-50 mt-1 w-full max-h-72 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg">
-                        {vendaLoading && (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>
-                        )}
-                        {!vendaLoading && vendaResults.length === 0 && (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum item encontrado.</div>
-                        )}
-                        {vendaResults.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => handleSelectVendaProduct(item)}
-                            className="w-full text-left px-3 py-2 hover:bg-muted/50 border-b last:border-0 transition-colors"
-                          >
-                            <p className="text-xs font-semibold truncate">{item.descricao || item.codigo}</p>
-                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
-                              {item.codigo && <span className="font-mono">{item.codigo}</span>}
-                              {item.preco_compra != null && (
-                                <span className="text-primary">USD {item.preco_compra.toFixed(2)}</span>
-                              )}
-                              {item.fornecedores[0] && <span className="truncate">• {item.fornecedores[0]}</span>}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Fornecedor</label>
-                  <Input placeholder="Nome do fornecedor" value={vendaForm.fornecedor}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, fornecedor: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Unidade</label>
-                  <Input placeholder="UN" value={vendaForm.unidade}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, unidade: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Preço Compra (USD/un)</label>
-                  <Input type="number" min="0" placeholder="0.00" value={vendaForm.precoCompraUSD}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, precoCompraUSD: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Quantidade</label>
-                  <Input type="number" min="1" placeholder="1" value={vendaForm.qtd}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, qtd: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Frete Total (USD)</label>
-                  <Input type="number" min="0" placeholder="0.00" value={vendaForm.freteUSD}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, freteUSD: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Impostos / Despesas (%)</label>
-                  <Input type="number" min="0" placeholder="0" value={vendaForm.impostoPct}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, impostoPct: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Câmbio (R$/USD)</label>
-                  <Input type="number" min="0" step="0.01" placeholder="5.20" value={vendaForm.cambio}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, cambio: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    Preço Venda (R$/un) <span className="text-[10px] opacity-60">opcional</span>
-                  </label>
-                  <Input type="number" min="0" placeholder="deixe vazio para calcular" value={vendaForm.precoVendaBRL}
-                    onChange={(e) => setVendaForm((f) => ({ ...f, precoVendaBRL: e.target.value }))} />
-                </div>
-              </div>
-              <Button onClick={addItem} disabled={!vendaForm.descricao || !vendaForm.precoCompraUSD} className="gap-1">
-                + Adicionar Item
-              </Button>
-            </div>
-
-            {/* Table */}
-            {calcs.length > 0 ? (
-              <div className="overflow-x-auto rounded-xl border border-border/60">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted/50 border-b">
-                      {["Descrição", "Qtd", "Custo Unit (USD)", "Frete/Un", "Custo Unit (R$)", "Custo Total (R$)", "Venda Mín (R$/un)", "Preço Venda (R$/un)", "Margem Real", ""].map((h) => (
-                        <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap text-muted-foreground">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {calcs.map(({ item, c }) => (
-                      <tr key={item.id} className={cn("border-b last:border-0 hover:bg-muted/30 transition-colors", c.abaixoMinimo && "bg-red-50 dark:bg-red-950/20")}>
-                        <td className="px-3 py-2 font-medium">
-                          <div>{item.descricao}</div>
-                          {item.fornecedor && (
-                            <div className="text-[10px] text-muted-foreground mt-0.5">{item.fornecedor}</div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-center">{c.qtd}{item.unidade ? ` ${item.unidade}` : ""}</td>
-                        <td className="px-3 py-2 num">$ {c.custoUnitUSD.toFixed(2)}</td>
-                        <td className="px-3 py-2 num">$ {(Number(item.freteUSD) / c.qtd || 0).toFixed(2)}</td>
-                        <td className="px-3 py-2 num">{c.custoUnitBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                        <td className="px-3 py-2 num">{c.custoTotalBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                        <td className="px-3 py-2 font-semibold text-primary num">{c.vendaMinBRL.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                        <td className="px-3 py-2">
-                          {item.precoVendaBRL ? (
-                            <span className={cn("font-semibold num", c.abaixoMinimo ? "text-destructive" : "text-emerald-600 dark:text-emerald-400")}>
-                              {Number(item.precoVendaBRL).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                              {c.abaixoMinimo && " ⚠"}
-                            </span>
-                          ) : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          {c.margemReal !== null ? (
-                            <span className={cn("font-bold num", c.margemReal >= margemNum ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                              {c.margemReal.toFixed(1)}%
-                            </span>
-                          ) : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Button size="sm" variant="ghost" onClick={() => removeItem(item.id)}>
-                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-muted/50 font-semibold text-xs border-t">
-                      <td className="px-3 py-2" colSpan={5}>Total geral</td>
-                      <td className="px-3 py-2 num">{totalCusto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                      <td className="px-3 py-2 text-primary num">{totalVendaMin.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
-                      <td colSpan={3} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                Adicione itens para calcular o preço de venda mínimo
-              </p>
-            )}
-          </div>
         </div>
 
       </main>
