@@ -12,6 +12,8 @@ function getCacheKey(categoria: string) {
   return `${PEDIDOS_CACHE_PREFIX}${categoria}`;
 }
 
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export function readPedidosCache(categoria: string): PedidosCachePayload | null {
   if (typeof window === "undefined") return null;
 
@@ -21,6 +23,12 @@ export function readPedidosCache(categoria: string): PedidosCachePayload | null 
 
     const parsed = JSON.parse(raw) as PedidosCachePayload;
     if (!Array.isArray(parsed.rows) || typeof parsed.timestamp !== "number") return null;
+
+    // Invalidate cache older than 24 hours so stale data is not served indefinitely
+    if (Date.now() - parsed.timestamp > CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(getCacheKey(categoria));
+      return null;
+    }
 
     return {
       rows: parsed.rows,
@@ -35,16 +43,40 @@ export function readPedidosCache(categoria: string): PedidosCachePayload | null 
 export function writePedidosCache(categoria: string, rows: PedidoRow[], fileName: string | null) {
   if (typeof window === "undefined") return;
 
-  try {
-    const payload: PedidosCachePayload = {
-      rows,
-      timestamp: Date.now(),
-      fileName,
-    };
+  const key = getCacheKey(categoria);
+  const payload: PedidosCachePayload = {
+    rows,
+    timestamp: Date.now(),
+    fileName,
+  };
+  const serialized = JSON.stringify(payload);
 
-    window.localStorage.setItem(getCacheKey(categoria), JSON.stringify(payload));
-  } catch {
-    // noop
+  try {
+    window.localStorage.setItem(key, serialized);
+  } catch (err) {
+    const isQuotaError =
+      err instanceof DOMException &&
+      (err.name === "QuotaExceededError" ||
+        err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+        err.code === 22);
+
+    if (isQuotaError) {
+      console.warn(
+        `[pedidosCache] localStorage quota exceeded for key "${key}". Clearing entry and retrying.`,
+        err,
+      );
+      try {
+        window.localStorage.removeItem(key);
+        window.localStorage.setItem(key, serialized);
+      } catch (retryErr) {
+        console.warn(
+          `[pedidosCache] Retry after quota clear also failed for key "${key}". Cache will not be persisted.`,
+          retryErr,
+        );
+      }
+    } else {
+      console.warn(`[pedidosCache] Unexpected error writing cache for key "${key}".`, err);
+    }
   }
 }
 

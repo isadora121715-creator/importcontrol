@@ -10,10 +10,10 @@ import { syncCatalogo } from "@/lib/syncCatalogo";
 import { toast } from "sonner";
 
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
-const FETCH_PAGE_SIZE = 500;
-const FETCH_TIMEOUT_MS = 15000;
-const UPLOAD_BATCH_SIZE = 100;
-const UPLOAD_TIMEOUT_MS = 20000;
+const FETCH_PAGE_SIZE = 2000;
+const FETCH_TIMEOUT_MS = 30000;
+const UPLOAD_BATCH_SIZE = 200;
+const UPLOAD_TIMEOUT_MS = 30000;
 
 function mapRow(r: Record<string, unknown>): PedidoRow {
   return {
@@ -139,9 +139,10 @@ export function usePedidos(categoria: string = "Conexões") {
     initialData: cachedSnapshot?.rows,
     initialDataUpdatedAt: cachedSnapshot?.timestamp,
     placeholderData: keepPreviousData,
-    staleTime: 60_000,
-    gcTime: 30 * 60_000,
-    retry: 1,
+    staleTime: 5 * 60_000,
+    gcTime: 60 * 60_000,
+    retry: 2,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     enabled: !isUpdating,
@@ -278,6 +279,7 @@ export function usePedidos(categoria: string = "Conexões") {
   const data = query.data ?? cachedSnapshot?.rows ?? [];
   const loading = query.isLoading && data.length === 0;
   const errorMessage = query.error instanceof Error ? query.error.message : null;
+  const hasStaleData = errorMessage !== null && data.length > 0;
 
   return {
     data,
@@ -290,6 +292,7 @@ export function usePedidos(categoria: string = "Conexões") {
     updateProgress,
     updateMessage,
     errorMessage,
+    hasStaleData,
     retry: query.refetch,
   };
 }
