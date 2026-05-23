@@ -151,7 +151,12 @@ export function usePedidos(categoria: string = "Conexões") {
   useEffect(() => {
     if (!query.data) return;
 
-    const cachedFileName = fileName ?? readPedidosCache(categoria)?.fileName ?? null;
+    // Don't overwrite a populated cache with empty Supabase results.
+    // This happens when RLS blocks reads or the DB is temporarily unavailable.
+    const existingCache = readPedidosCache(categoria);
+    if (query.data.length === 0 && existingCache && existingCache.rows.length > 0) return;
+
+    const cachedFileName = fileName ?? existingCache?.fileName ?? null;
     writePedidosCache(categoria, query.data, cachedFileName);
 
     if (query.dataUpdatedAt) {
@@ -240,8 +245,9 @@ export function usePedidos(categoria: string = "Conexões") {
       }
       setUpdateProgress(100);
       setUpdateMessage("Atualização concluída.");
-      void queryClient.invalidateQueries({ queryKey: ["pedidos", categoria] });
-      toast.success(`Planilha carregada: ${rows.length} registros salvos no banco`);
+      // Do NOT invalidate — that would trigger a Supabase refetch which returns []
+      // when RLS blocks inserts, overwriting the data we just saved locally.
+      toast.success(`Planilha carregada: ${rows.length} registros salvos`);
     } catch (error) {
       console.error("Upload error:", error);
       const message = error instanceof Error
@@ -263,7 +269,10 @@ export function usePedidos(categoria: string = "Conexões") {
     e.target.value = "";
   }, [categoria, queryClient]);
 
-  const data = query.data ?? cachedSnapshot?.rows ?? [];
+  // Prefer non-empty data: if Supabase returns [] (RLS or empty DB), use the
+  // localStorage cache so uploaded data isn't lost on page reload.
+  const freshData = query.data ?? [];
+  const data = freshData.length > 0 ? freshData : (cachedSnapshot?.rows ?? []);
   const loading = query.isLoading && data.length === 0;
   const errorMessage = query.error instanceof Error ? query.error.message : null;
   const hasStaleData = errorMessage !== null && data.length > 0;

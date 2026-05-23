@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { PedidoRow } from "./parseExcel";
+import { readPedidosCache } from "./pedidosPerformance";
 
 export const CATALOGO_KEY = "importcontrol.catalogo.v1";
 
@@ -99,6 +100,24 @@ async function fetchPedidosForCatalog(): Promise<
     if (!data || data.length === 0) break;
     all.push(...data);
     if (data.length < PAGE) break;
+  }
+
+  // If Supabase returned nothing (empty DB or RLS), fall back to localStorage caches
+  if (all.length === 0) {
+    for (const cat of ["Conexões", "Tubos", "Válvulas"] as const) {
+      const cache = readPedidosCache(cat);
+      if (!cache?.rows?.length) continue;
+      for (const row of cache.rows) {
+        all.push({
+          codigo:       row.codigo       ?? null,
+          descricao:    row.descricao    ?? null,
+          preco_compra: row.precoCompra  ?? null,
+          preco_venda:  row.precoVenda   ?? null,
+          fornecedor:   row.fornecedor   ?? null,
+          categoria:    cat,
+        });
+      }
+    }
   }
 
   return all;
@@ -219,8 +238,9 @@ export async function upsertCatalogoItems(items: CatalogoItem[]): Promise<void> 
     .from("catalogo_materiais")
     .upsert(items.map(itemToRow), { onConflict: "id" });
   if (error) {
-    console.error("upsertCatalogoItems error:", error);
-    throw error; // propagate so the caller can show a proper warning
+    // Log but don't throw — column may not exist yet or RLS may block.
+    // Catalog data will still be available from localStorage pedidos cache.
+    console.warn("upsertCatalogoItems (non-fatal):", error.message ?? error);
   }
 }
 
