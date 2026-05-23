@@ -130,6 +130,33 @@ function monthLabel(key: string): string {
   return `${months[Number(m) - 1] ?? m}/${y.slice(-2)}`;
 }
 
+// GitHub-hosted JSON snapshots — same fallback used by usePedidos
+const GITHUB_SNAPSHOT: Record<string, string> = {
+  "Conexões": "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/conexoes-cache.json",
+  "Tubos":    "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/tubos-cache.json",
+  "Válvulas": "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/valvulas-cache.json",
+};
+
+// Map camelCase JSON cache rows → PedidoSummary (snake_case)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function cacheRowToSummary(r: any, categoria: string): PedidoSummary {
+  return {
+    categoria,
+    status_fornecedor:   r.statusFornecedor   ?? null,
+    status_compra_venda: r.statusCompraVenda  ?? null,
+    fornecedor:          r.fornecedor         ?? null,
+    cliente:             r.cliente            ?? null,
+    preco_venda:         r.precoVenda  != null ? Number(r.precoVenda)  : null,
+    preco_compra:        r.precoCompra != null ? Number(r.precoCompra) : null,
+    qty_venda:           r.qtyVenda    != null ? Number(r.qtyVenda)    : null,
+    qty_compra:          r.qtyCompra   != null ? Number(r.qtyCompra)   : null,
+    po:                  r.po                 ?? null,
+    embarque:            r.embarque           ?? null,
+    prazo_cliente:       r.prazoCliente       ?? null,
+    emissao_pedido_sistema: r.emissaoPedidoSistema ?? null,
+  };
+}
+
 async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
   const all: PedidoSummary[] = [];
   const pageSize = 1000;
@@ -143,6 +170,26 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
     all.push(...(data as PedidoSummary[]));
     if (data.length < pageSize) break;
   }
+
+  // If Supabase returned nothing, load from GitHub snapshots (shared for all users)
+  if (all.length === 0) {
+    await Promise.all(
+      Object.entries(GITHUB_SNAPSHOT).map(async ([cat, url]) => {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows: any[] = await resp.json();
+          if (Array.isArray(rows)) {
+            all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
+          }
+        } catch (e) {
+          console.warn("GitHub snapshot fetch failed for", cat, e);
+        }
+      })
+    );
+  }
+
   return all;
 }
 
@@ -152,8 +199,10 @@ const Geral = () => {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["pedidos-geral-summary"],
     queryFn: fetchAllCategoriesSummary,
-    staleTime: 60_000,
-    gcTime: 30 * 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const [reportDim, setReportDim] = useState<ReportDimension>("mes");
