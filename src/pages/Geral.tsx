@@ -130,11 +130,12 @@ function monthLabel(key: string): string {
   return `${months[Number(m) - 1] ?? m}/${y.slice(-2)}`;
 }
 
-// GitHub-hosted JSON snapshots — same fallback used by usePedidos
+// Static JSON snapshots served from the app's own domain (public/data/).
+// Every user who opens the link gets the same pre-loaded data automatically.
 const GITHUB_SNAPSHOT: Record<string, string> = {
-  "Conexões": "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/conexoes-cache.json",
-  "Tubos":    "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/tubos-cache.json",
-  "Válvulas": "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/valvulas-cache.json",
+  "Conexões": "/data/conexoes-cache.json",
+  "Tubos":    "/data/tubos-cache.json",
+  "Válvulas": "/data/valvulas-cache.json",
 };
 
 // Map camelCase JSON cache rows → PedidoSummary (snake_case)

@@ -11,12 +11,12 @@ import { toast } from "sonner";
 
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
 
-// GitHub-hosted JSON snapshots — shared fallback so every user sees the same
-// pre-loaded data even when the Supabase DB is empty or RLS blocks inserts.
+// Static JSON snapshots bundled with the app (public/data/).
+// Served from the app's own domain — no external dependency, works for every user.
 const GITHUB_SNAPSHOT: Record<string, string> = {
-  "Conexões":  "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/conexoes-cache.json",
-  "Tubos":     "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/tubos-cache.json",
-  "Válvulas":  "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/valvulas-cache.json",
+  "Conexões": "/data/conexoes-cache.json",
+  "Tubos":    "/data/tubos-cache.json",
+  "Válvulas": "/data/valvulas-cache.json",
 };
 const FETCH_PAGE_SIZE = 2000;
 const FETCH_TIMEOUT_MS = 30000;
