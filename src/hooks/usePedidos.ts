@@ -10,6 +10,14 @@ import { syncCatalogo } from "@/lib/syncCatalogo";
 import { toast } from "sonner";
 
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
+
+// GitHub-hosted JSON snapshots — shared fallback so every user sees the same
+// pre-loaded data even when the Supabase DB is empty or RLS blocks inserts.
+const GITHUB_SNAPSHOT: Record<string, string> = {
+  "Conexões":  "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/conexoes-cache.json",
+  "Tubos":     "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/tubos-cache.json",
+  "Válvulas":  "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data/valvulas-cache.json",
+};
 const FETCH_PAGE_SIZE = 2000;
 const FETCH_TIMEOUT_MS = 30000;
 const UPLOAD_BATCH_SIZE = 200;
@@ -115,7 +123,29 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
     }
   }
 
-  return allRows.map(mapRow);
+  // Supabase has data — use it (RLS is fixed or data was inserted normally).
+  if (allRows.length > 0) {
+    return allRows.map(mapRow);
+  }
+
+  // Supabase is empty (RLS blocking or DB not yet populated).
+  // Fall back to the GitHub-hosted snapshot so all users see pre-loaded data.
+  const snapshotUrl = GITHUB_SNAPSHOT[categoria];
+  if (snapshotUrl) {
+    try {
+      const resp = await fetch(snapshotUrl);
+      if (resp.ok) {
+        const data: PedidoRow[] = await resp.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn("GitHub snapshot fetch failed:", e);
+    }
+  }
+
+  return [];
 }
 
 export function usePedidos(categoria: string = "Conexões") {
