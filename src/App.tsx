@@ -16,6 +16,7 @@ import Tubos from "@/pages/Tubos";
 import Valvulas from "@/pages/Valvulas";
 import Fornecedores from "@/pages/Fornecedores";
 import Configuracoes from "@/pages/Configuracoes";
+import Frete from "@/pages/Frete";
 import Login from "@/pages/Login";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
@@ -55,6 +56,7 @@ export default function App() {
               <Route path="/fornecedores" element={<Fornecedores />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="/conexoes" element={<Index />} />
+              <Route path="/frete" element={<Frete />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
