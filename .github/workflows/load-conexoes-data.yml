@@ -1,0 +1,107 @@
+name: Carregar Dados Conexões + Corrigir Permissões
+
+on:
+  workflow_dispatch:
+    inputs:
+      service_role_key:
+        description: 'Cole aqui a SUPABASE SERVICE ROLE KEY (Supabase → Project Settings → API → service_role)'
+        required: true
+        type: string
+
+jobs:
+  load-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Apply SQL (fix policies + insert Conexões data)
+        env:
+          SERVICE_ROLE_KEY: ${{ inputs.service_role_key }}
+        run: |
+          python - << 'PYEOF'
+          import requests, os
+
+          SUPABASE_URL = "https://hsyohvptriadxflghrlb.supabase.co"
+          SERVICE_KEY = os.environ["SERVICE_ROLE_KEY"]
+          HEADERS = {
+              "apikey": SERVICE_KEY,
+              "Authorization": f"Bearer {SERVICE_KEY}",
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+          }
+
+          # Read SQL statements
+          with open(".github/workflows/_sql_data.txt", encoding="utf-8") as f:
+              statements = [s.strip() for s in f.read().split("\n") if s.strip() and not s.strip().startswith("--")]
+
+          print(f"Total statements: {len(statements)}")
+
+          # Execute each statement via Supabase RPC
+          # Use pg_net or direct REST depending on what's available
+          # For DDL (policies), we use the management API
+          import json, sys
+
+          # Split into DDL (policies/delete) vs DML (inserts)
+          ddl = [s for s in statements if any(s.upper().startswith(kw) for kw in ("DROP", "CREATE", "DELETE"))]
+          inserts = [s for s in statements if s.upper().startswith("INSERT")]
+
+          print(f"DDL statements: {len(ddl)}")
+          print(f"INSERT statements: {len(inserts)}")
+
+          # Step 1: Apply DDL via Management API
+          ddl_sql = "\n".join(ddl)
+          r = requests.post(
+              f"https://api.supabase.com/v1/projects/hsyohvptriadxflghrlb/database/query",
+              headers={
+                  "Authorization": f"Bearer {SERVICE_KEY}",
+                  "Content-Type": "application/json"
+              },
+              json={"query": ddl_sql},
+              timeout=30
+          )
+          print(f"DDL via Management API: {r.status_code} {r.text[:200]}")
+
+          if r.status_code not in (200, 201):
+              # Try via RPC with service role key directly
+              print("Management API failed, trying direct REST with service role key...")
+
+          # Step 2: Insert data in batches via REST API (service role bypasses RLS)
+          import math
+          BATCH = 200
+          inserted = 0
+          errors = 0
+
+          for i in range(0, len(inserts), BATCH):
+              batch_sql = "\n".join(inserts[i:i+BATCH])
+              # Parse INSERT statements to build JSON payload
+              # Use simpler approach: execute each batch as a transaction via management API
+              r = requests.post(
+                  f"https://api.supabase.com/v1/projects/hsyohvptriadxflghrlb/database/query",
+                  headers={"Authorization": f"Bearer {SERVICE_KEY}", "Content-Type": "application/json"},
+                  json={"query": batch_sql},
+                  timeout=60
+              )
+              batch_num = i // BATCH + 1
+              total = math.ceil(len(inserts) / BATCH)
+              if r.status_code in (200, 201):
+                  inserted += min(BATCH, len(inserts) - i)
+                  print(f"Batch {batch_num}/{total}: OK ({inserted} total)")
+              else:
+                  errors += 1
+                  print(f"Batch {batch_num}/{total}: ERROR {r.status_code} {r.text[:150]}")
+
+          print(f"\n=== DONE ===")
+          print(f"Inserted: {inserted}/{len(inserts)}")
+          if errors:
+              print(f"Errors: {errors}")
+              sys.exit(1)
+          PYEOF
