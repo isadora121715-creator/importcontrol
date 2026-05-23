@@ -197,42 +197,22 @@ export function usePedidos(categoria: string = "Conexões") {
         return toDbRow(rest as PedidoRow, categoria);
       });
 
-      setUpdateMessage("Limpando dados antigos...");
-      await retryAsync(async () => {
-        const { error } = await withTimeout(
-          supabase
-            .from("pedidos")
-            .delete()
-            .eq("categoria", categoria),
-          UPLOAD_TIMEOUT_MS,
-          "A limpeza dos pedidos demorou demais. Tente novamente.",
-        );
+      setUpdateMessage("Salvando dados no banco...");
+      setUpdateProgress(40);
 
-        if (error) throw error;
-      }, 2, 800);
+      const { data: fnResult, error: fnError } = await supabase.functions.invoke(
+        "upsert-pedidos",
+        { body: { rows: dbRows, categoria } },
+      );
 
-      let inserted = 0;
-      for (let i = 0; i < dbRows.length; i += UPLOAD_BATCH_SIZE) {
-        const batch = dbRows.slice(i, i + UPLOAD_BATCH_SIZE);
-        const batchIndex = Math.floor(i / UPLOAD_BATCH_SIZE) + 1;
-
-        setUpdateMessage(`Atualizando pedidos... lote ${batchIndex}`);
-
-        await retryAsync(async () => {
-          const { error } = await withTimeout(
-            supabase.from("pedidos").insert(batch),
-            UPLOAD_TIMEOUT_MS,
-            `O lote ${batchIndex} demorou demais para ser enviado.`,
-          );
-
-          if (error) throw error;
-        }, 3, 1200);
-
-        inserted += batch.length;
-        setUpdateProgress(Math.round((inserted / dbRows.length) * 100));
-        await yieldToMainThread();
+      if (fnError) {
+        throw new Error(fnError.message || "Erro na função de upload. Tente novamente.");
+      }
+      if (fnResult?.error) {
+        throw new Error(fnResult.error);
       }
 
+      setUpdateProgress(90);
       const completedAt = Date.now();
       setFileName(file.name);
       setLastUpdated(completedAt);
@@ -261,7 +241,9 @@ export function usePedidos(categoria: string = "Conexões") {
       console.error("Upload error:", error);
       const message = error instanceof Error
         ? error.message
-        : "Erro ao atualizar a planilha. Verifique o formato do arquivo e tente novamente.";
+        : (typeof error === "object" && error !== null && "message" in error)
+          ? String((error as { message: unknown }).message)
+          : "Erro ao atualizar a planilha. Verifique o formato do arquivo e tente novamente.";
 
       setUpdateMessage(message);
       toast.error(message);
