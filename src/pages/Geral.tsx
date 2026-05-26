@@ -138,6 +138,15 @@ const GITHUB_SNAPSHOT: Record<string, string> = {
   "Válvulas": "/data/valvulas-cache.json",
 };
 
+// Supabase Storage — live JSON uploaded by users via the web app.
+const STORAGE_BASE_URL =
+  "https://hsyohvptriadxflghrlb.supabase.co/storage/v1/object/public/pedidos-json";
+const STORAGE_SLUG: Record<string, string> = {
+  "Conexões": "conexoes",
+  "Tubos":    "tubos",
+  "Válvulas": "valvulas",
+};
+
 // Map camelCase JSON cache rows → PedidoSummary (snake_case)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function cacheRowToSummary(r: any, categoria: string): PedidoSummary {
@@ -172,7 +181,27 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
     if (data.length < pageSize) break;
   }
 
-  // If Supabase returned nothing, load from GitHub snapshots (shared for all users)
+  // 2️⃣ Supabase Storage — JSON uploaded by any user via the web app (live sync).
+  if (all.length === 0) {
+    await Promise.all(
+      Object.entries(STORAGE_SLUG).map(async ([cat, slug]) => {
+        try {
+          const url = `${STORAGE_BASE_URL}/${slug}.json?cb=${Date.now()}`;
+          const resp = await fetch(url);
+          if (!resp.ok) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows: any[] = await resp.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
+          }
+        } catch (e) {
+          console.warn("Supabase Storage fetch failed for", cat, e);
+        }
+      })
+    );
+  }
+
+  // 3️⃣ Static snapshots bundled with the app — baseline before any upload.
   if (all.length === 0) {
     await Promise.all(
       Object.entries(GITHUB_SNAPSHOT).map(async ([cat, url]) => {
@@ -185,7 +214,7 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
             all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
           }
         } catch (e) {
-          console.warn("GitHub snapshot fetch failed for", cat, e);
+          console.warn("Static snapshot fetch failed for", cat, e);
         }
       })
     );

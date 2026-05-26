@@ -18,6 +18,20 @@ const GITHUB_SNAPSHOT: Record<string, string> = {
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
 };
+
+// Supabase Storage bucket used for cross-user live sync.
+// When a user uploads a spreadsheet, the JSON is saved here so every other
+// browser fetches the updated version without a new deployment.
+const STORAGE_BUCKET = "pedidos-json";
+const STORAGE_BASE_URL =
+  "https://hsyohvptriadxflghrlb.supabase.co/storage/v1/object/public/" + STORAGE_BUCKET;
+const CATEGORIA_SLUG: Record<string, string> = {
+  "Conexões":  "conexoes",
+  "Tubos":     "tubos",
+  "Válvulas":  "valvulas",
+  "Embarques": "embarques",
+};
+
 const FETCH_PAGE_SIZE = 2000;
 const FETCH_TIMEOUT_MS = 30000;
 const UPLOAD_BATCH_SIZE = 200;
@@ -123,13 +137,33 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
     }
   }
 
-  // Supabase has data — use it (RLS is fixed or data was inserted normally).
+  // 1️⃣ Supabase DB has data — use it (RLS fixed or data inserted normally).
   if (allRows.length > 0) {
     return allRows.map(mapRow);
   }
 
-  // Supabase is empty (RLS blocking or DB not yet populated).
-  // Fall back to the GitHub-hosted snapshot so all users see pre-loaded data.
+  // 2️⃣ Supabase Storage — JSON uploaded by any user via the web app.
+  //    This is the cross-user live-sync layer: whoever uploads a spreadsheet
+  //    writes here, and everyone else reads the latest version instantly.
+  const slug = CATEGORIA_SLUG[categoria];
+  if (slug) {
+    try {
+      // Cache-bust so browsers always fetch the freshest version.
+      const storageUrl = `${STORAGE_BASE_URL}/${slug}.json?cb=${Date.now()}`;
+      const resp = await fetch(storageUrl);
+      if (resp.ok) {
+        const data: PedidoRow[] = await resp.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn("Supabase Storage fetch failed:", e);
+    }
+  }
+
+  // 3️⃣ Static snapshot bundled with the app (public/data/).
+  //    Serves as baseline for every user before anyone has uploaded a spreadsheet.
   const snapshotUrl = GITHUB_SNAPSHOT[categoria];
   if (snapshotUrl) {
     try {
@@ -141,7 +175,7 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
         }
       }
     } catch (e) {
-      console.warn("GitHub snapshot fetch failed:", e);
+      console.warn("Static snapshot fetch failed:", e);
     }
   }
 
@@ -252,12 +286,31 @@ export function usePedidos(categoria: string = "Conexões") {
         console.warn("Falha ao salvar no servidor, dados disponíveis localmente:", serverErr);
       }
 
-      setUpdateProgress(90);
+      setUpdateProgress(70);
       const completedAt = Date.now();
       setFileName(file.name);
       setLastUpdated(completedAt);
       writePedidosCache(categoria, rows, file.name);
       queryClient.setQueryData(["pedidos", categoria], rows);
+
+      // 🔄 Supabase Storage sync — save JSON so every other browser sees this update.
+      const slug = CATEGORIA_SLUG[categoria];
+      if (slug) {
+        try {
+          setUpdateMessage("Sincronizando com outros usuários...");
+          const blob = new Blob([JSON.stringify(rows)], { type: "application/json" });
+          const { error: storErr } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .upload(`${slug}.json`, blob, { upsert: true, contentType: "application/json" });
+          if (storErr) {
+            console.warn("Storage sync failed (not critical):", storErr.message);
+          }
+        } catch (e) {
+          console.warn("Storage sync error:", e);
+        }
+      }
+
+      setUpdateProgress(90);
 
       // Sync catalog for categories that carry product data, then refresh the catalog view
       if (categoria !== "Embarques") {
