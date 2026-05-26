@@ -19,9 +19,19 @@ const GITHUB_SNAPSHOT: Record<string, string> = {
   "Válvulas": "/data/valvulas-cache.json",
 };
 
-// Supabase Storage bucket used for cross-user live sync.
-// When a user uploads a spreadsheet, the JSON is saved here so every other
-// browser fetches the updated version without a new deployment.
+// JSONBlob IDs — free public JSON storage used for cross-user live sync.
+// When any user uploads a spreadsheet the JSON is PUT to the blob so every
+// other browser fetches the latest version immediately, without a new deploy.
+// GET /api/jsonBlob/{id}  — public, no auth
+// PUT /api/jsonBlob/{id}  — public, no auth (only the ID is the "key")
+const JSONBLOB_BASE = "https://jsonblob.com/api/jsonBlob";
+const JSONBLOB_IDS: Record<string, string> = {
+  "Conexões": "019e66a9-d994-7c78-b837-07ce109280cc",
+  "Tubos":    "019e66aa-305b-7623-9e1d-8f31663f688c",
+  "Válvulas": "019e66aa-3409-73e0-8d4f-24c348004906",
+};
+
+// Supabase Storage bucket (future use — requires one-time admin setup).
 const STORAGE_BUCKET = "pedidos-json";
 const STORAGE_BASE_URL =
   "https://hsyohvptriadxflghrlb.supabase.co/storage/v1/object/public/" + STORAGE_BUCKET;
@@ -142,15 +152,16 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
     return allRows.map(mapRow);
   }
 
-  // 2️⃣ Supabase Storage — JSON uploaded by any user via the web app.
-  //    This is the cross-user live-sync layer: whoever uploads a spreadsheet
-  //    writes here, and everyone else reads the latest version instantly.
-  const slug = CATEGORIA_SLUG[categoria];
-  if (slug) {
+  // 2️⃣ JSONBlob — live JSON store updated by any user via the web app.
+  //    No auth required to read or write. PUT replaces the blob, GET fetches it.
+  //    This is the cross-user sync layer: whoever uploads a spreadsheet writes
+  //    here and everyone else immediately reads the updated version.
+  const blobId = JSONBLOB_IDS[categoria];
+  if (blobId) {
     try {
-      // Cache-bust so browsers always fetch the freshest version.
-      const storageUrl = `${STORAGE_BASE_URL}/${slug}.json?cb=${Date.now()}`;
-      const resp = await fetch(storageUrl);
+      const resp = await fetch(`${JSONBLOB_BASE}/${blobId}`, {
+        headers: { Accept: "application/json" },
+      });
       if (resp.ok) {
         const data: PedidoRow[] = await resp.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -158,7 +169,7 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
         }
       }
     } catch (e) {
-      console.warn("Supabase Storage fetch failed:", e);
+      console.warn("JSONBlob fetch failed:", e);
     }
   }
 
@@ -293,20 +304,21 @@ export function usePedidos(categoria: string = "Conexões") {
       writePedidosCache(categoria, rows, file.name);
       queryClient.setQueryData(["pedidos", categoria], rows);
 
-      // 🔄 Supabase Storage sync — save JSON so every other browser sees this update.
-      const slug = CATEGORIA_SLUG[categoria];
-      if (slug) {
+      // 🔄 JSONBlob sync — PUT the updated JSON so every other browser fetches it immediately.
+      const blobId = JSONBLOB_IDS[categoria];
+      if (blobId) {
         try {
           setUpdateMessage("Sincronizando com outros usuários...");
-          const blob = new Blob([JSON.stringify(rows)], { type: "application/json" });
-          const { error: storErr } = await supabase.storage
-            .from(STORAGE_BUCKET)
-            .upload(`${slug}.json`, blob, { upsert: true, contentType: "application/json" });
-          if (storErr) {
-            console.warn("Storage sync failed (not critical):", storErr.message);
+          const syncResp = await fetch(`${JSONBLOB_BASE}/${blobId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rows),
+          });
+          if (!syncResp.ok) {
+            console.warn("JSONBlob sync failed (not critical):", syncResp.status);
           }
         } catch (e) {
-          console.warn("Storage sync error:", e);
+          console.warn("JSONBlob sync error (not critical):", e);
         }
       }
 

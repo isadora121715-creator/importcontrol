@@ -138,13 +138,12 @@ const GITHUB_SNAPSHOT: Record<string, string> = {
   "Válvulas": "/data/valvulas-cache.json",
 };
 
-// Supabase Storage — live JSON uploaded by users via the web app.
-const STORAGE_BASE_URL =
-  "https://hsyohvptriadxflghrlb.supabase.co/storage/v1/object/public/pedidos-json";
-const STORAGE_SLUG: Record<string, string> = {
-  "Conexões": "conexoes",
-  "Tubos":    "tubos",
-  "Válvulas": "valvulas",
+// JSONBlob — live JSON store, no auth, updated by any user via the web app.
+const JSONBLOB_BASE = "https://jsonblob.com/api/jsonBlob";
+const JSONBLOB_IDS: Record<string, string> = {
+  "Conexões": "019e66a9-d994-7c78-b837-07ce109280cc",
+  "Tubos":    "019e66aa-305b-7623-9e1d-8f31663f688c",
+  "Válvulas": "019e66aa-3409-73e0-8d4f-24c348004906",
 };
 
 // Map camelCase JSON cache rows → PedidoSummary (snake_case)
@@ -181,13 +180,14 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
     if (data.length < pageSize) break;
   }
 
-  // 2️⃣ Supabase Storage — JSON uploaded by any user via the web app (live sync).
+  // 2️⃣ JSONBlob — live JSON updated by any user via the web app (cross-user sync).
   if (all.length === 0) {
     await Promise.all(
-      Object.entries(STORAGE_SLUG).map(async ([cat, slug]) => {
+      Object.entries(JSONBLOB_IDS).map(async ([cat, blobId]) => {
         try {
-          const url = `${STORAGE_BASE_URL}/${slug}.json?cb=${Date.now()}`;
-          const resp = await fetch(url);
+          const resp = await fetch(`${JSONBLOB_BASE}/${blobId}`, {
+            headers: { Accept: "application/json" },
+          });
           if (!resp.ok) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const rows: any[] = await resp.json();
@@ -195,7 +195,7 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
             all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
           }
         } catch (e) {
-          console.warn("Supabase Storage fetch failed for", cat, e);
+          console.warn("JSONBlob fetch failed for", cat, e);
         }
       })
     );
