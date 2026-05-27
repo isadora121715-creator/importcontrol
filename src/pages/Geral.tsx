@@ -132,8 +132,9 @@ function monthLabel(key: string): string {
 
 // Static JSON snapshots served from the app's own domain (public/data/).
 // Every user who opens the link gets the same pre-loaded data automatically.
-// GitHub raw URL — full CORS support, no auth required, always latest commit.
-const GITHUB_RAW = "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data";
+// GitHub Contents API — always latest version, CORS-enabled, requires token.
+// Because the repo is private, raw.githubusercontent.com URLs don't work without auth.
+const GITHUB_API = "https://api.github.com/repos/isadora121715-creator/importcontrol/contents/public/data";
 const GITHUB_FILE: Record<string, string> = {
   "Conexões": "conexoes-cache.json",
   "Tubos":    "tubos-cache.json",
@@ -146,6 +147,11 @@ const STATIC_SNAPSHOT: Record<string, string> = {
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
 };
+
+/** Decode base64-encoded content returned by GitHub Contents API (handles UTF-8) */
+function decodeGithubContent(b64: string): string {
+  return decodeURIComponent(escape(atob(b64.replace(/\n/g, ""))));
+}
 
 // Map camelCase JSON cache rows → PedidoSummary (snake_case)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,23 +187,30 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
     if (data.length < pageSize) break;
   }
 
-  // 2️⃣ GitHub raw URL — always the latest committed version, full CORS support.
-  //    Picks up updates committed by any user via the Contents API within ~5 min.
-  if (all.length === 0) {
+  // 2️⃣ GitHub Contents API — always the latest committed version.
+  //    Requires VITE_GITHUB_TOKEN (private repo). GitHub API is CORS-enabled and
+  //    supports the Authorization header from browser fetch calls.
+  const ghToken = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
+  if (all.length === 0 && ghToken) {
     await Promise.all(
       Object.entries(GITHUB_FILE).map(async ([cat, file]) => {
         try {
-          const resp = await fetch(`${GITHUB_RAW}/${file}?_=${Date.now()}`, {
+          const resp = await fetch(`${GITHUB_API}/${file}`, {
+            headers: {
+              Authorization: `token ${ghToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
             cache: "no-store",
           });
           if (!resp.ok) return;
+          const fileData = await resp.json();
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const rows: any[] = await resp.json();
+          const rows: any[] = JSON.parse(decodeGithubContent(fileData.content));
           if (Array.isArray(rows) && rows.length > 0) {
             all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
           }
         } catch (e) {
-          console.warn("GitHub raw fetch failed for", cat, e);
+          console.warn("GitHub Contents API fetch failed for", cat, e);
         }
       })
     );

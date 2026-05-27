@@ -12,17 +12,17 @@ import { toast } from "sonner";
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
 
 // ── GitHub sync ────────────────────────────────────────────────────────────
-// Cross-user live sync: when any user uploads a spreadsheet the app commits
-// the updated JSON directly to the GitHub repo via the Contents API.
-// Every other user then reads the latest version from raw.githubusercontent.com
-// (full CORS support, no auth required for reads).
+// Cross-user live sync via GitHub Contents API (full CORS, supports auth headers).
+// Because the repo is private, both reads and writes use the token.
 //
-// The GitHub token is read from VITE_GITHUB_TOKEN (Lovable env var / .env.local).
-// Without the token uploads still work locally via localStorage cache; syncing
-// to other users won't happen until the token is configured.
-const GITHUB_REPO  = "isadora121715-creator/importcontrol";
-const GITHUB_RAW   = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/public/data`;
-const GITHUB_API   = `https://api.github.com/repos/${GITHUB_REPO}/contents/public/data`;
+// Token is read from VITE_GITHUB_TOKEN (Lovable env var or .env.local).
+// Without the token:
+//   - reads fall through to the static files bundled with the app
+//   - uploads work locally (localStorage cache) but don't sync to other users
+// With the token (add in Lovable → Project Settings → Environment Variables):
+//   - reads always return the latest committed version
+//   - uploads commit the updated JSON to the repo → all users see it within seconds
+const GITHUB_API = "https://api.github.com/repos/isadora121715-creator/importcontrol/contents/public/data";
 
 // JSON file name for each category (must match public/data/ filenames)
 const CATEGORIA_FILE: Record<string, string> = {
@@ -37,6 +37,11 @@ const STATIC_SNAPSHOT: Record<string, string> = {
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
 };
+
+/** Decode base64-encoded content returned by GitHub Contents API (handles UTF-8) */
+function decodeGithubContent(b64: string): string {
+  return decodeURIComponent(escape(atob(b64.replace(/\n/g, ""))));
+}
 
 const FETCH_PAGE_SIZE = 2000;
 const FETCH_TIMEOUT_MS = 30000;
@@ -148,25 +153,30 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
     return allRows.map(mapRow);
   }
 
-  // 2️⃣ GitHub raw URL — always the latest committed version.
-  //    raw.githubusercontent.com sends Access-Control-Allow-Origin: * so this
-  //    works from any browser without auth. When a user uploads a spreadsheet,
-  //    the app commits the new JSON to the repo via the Contents API (layer below)
-  //    and this fetch picks it up within ~5 minutes (GitHub CDN propagation).
-  const ghFile = CATEGORIA_FILE[categoria];
-  if (ghFile) {
+  // 2️⃣ GitHub Contents API — always the latest committed version.
+  //    Requires VITE_GITHUB_TOKEN because the repo is private.
+  //    GitHub API sends Access-Control-Allow-Origin: * and supports Authorization
+  //    headers in CORS preflight, so this works from any browser with the token.
+  const ghToken = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
+  const ghFile  = CATEGORIA_FILE[categoria];
+  if (ghToken && ghFile) {
     try {
-      const resp = await fetch(`${GITHUB_RAW}/${ghFile}?_=${Date.now()}`, {
+      const resp = await fetch(`${GITHUB_API}/${ghFile}`, {
+        headers: {
+          Authorization: `token ${ghToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
         cache: "no-store",
       });
       if (resp.ok) {
-        const data: PedidoRow[] = await resp.json();
+        const fileData = await resp.json();
+        const data: PedidoRow[] = JSON.parse(decodeGithubContent(fileData.content));
         if (Array.isArray(data) && data.length > 0) {
           return data;
         }
       }
     } catch (e) {
-      console.warn("GitHub raw fetch failed:", e);
+      console.warn("GitHub Contents API fetch failed:", e);
     }
   }
 
