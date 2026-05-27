@@ -18,6 +18,7 @@ export function HeaderTabs() {
   const isPrecificacao = path.startsWith("/precificacao");
   const isCatalogo = path.startsWith("/catalogo");
   const isFrete = path.startsWith("/frete");
+  const isPagamentos = path.startsWith("/pagamentos");
 
   const tabClass = (active: boolean) =>
     `flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors ${
@@ -41,6 +42,7 @@ export function HeaderTabs() {
     { to: "/precificacao",label: "Precificação",active: isPrecificacao },
     { to: "/embarques",   label: "Embarques",   active: isEmbarques },
     { to: "/catalogo",    label: "Catálogo",    active: isCatalogo },
+    { to: "/pagamentos",  label: "Pagamentos",  active: isPagamentos },
   ];
 
   return (

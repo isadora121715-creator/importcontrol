@@ -17,6 +17,7 @@ import Valvulas from "@/pages/Valvulas";
 import Fornecedores from "@/pages/Fornecedores";
 import Configuracoes from "@/pages/Configuracoes";
 import Frete from "@/pages/Frete";
+import Pagamentos from "@/pages/Pagamentos";
 import Login from "@/pages/Login";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "@/pages/NotFound";
@@ -57,6 +58,7 @@ export default function App() {
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="/conexoes" element={<Index />} />
               <Route path="/frete" element={<Frete />} />
+              <Route path="/pagamentos" element={<Pagamentos />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
