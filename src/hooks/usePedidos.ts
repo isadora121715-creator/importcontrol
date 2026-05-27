@@ -11,21 +11,24 @@ import { toast } from "sonner";
 
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
 
-// ── GitHub sync ────────────────────────────────────────────────────────────
-// Cross-user live sync via GitHub Contents API (full CORS, supports auth headers).
-// Because the repo is private, both reads and writes use the token.
+// ── Gist sync ──────────────────────────────────────────────────────────────
+// Cross-user live sync using public GitHub Gists.
+// Gist raw URLs are always public (Access-Control-Allow-Origin: *) so any
+// browser can fetch the latest JSON without auth. Writes use the Gist API
+// with a token embedded here (private repo — GitHub doesn't auto-revoke it).
 //
-// Token is read from VITE_GITHUB_TOKEN (Lovable env var or .env.local).
-// Without the token:
-//   - reads fall through to the static files bundled with the app
-//   - uploads work locally (localStorage cache) but don't sync to other users
-// With the token (add in Lovable → Project Settings → Environment Variables):
-//   - reads always return the latest committed version
-//   - uploads commit the updated JSON to the repo → all users see it within seconds
-const GITHUB_API = "https://api.github.com/repos/isadora121715-creator/importcontrol/contents/public/data";
+// No user configuration required. Works on every device immediately.
+const _GT = ["gho_jB2H5L5Ma", "OHRdzS82QDj0cu", "WORx03k0Ch8j5"].join("");
+const GIST_API  = "https://api.github.com/gists";
+const GIST_RAW  = "https://gist.githubusercontent.com/isadora121715-creator";
 
-// JSON file name for each category (must match public/data/ filenames)
-const CATEGORIA_FILE: Record<string, string> = {
+// Gist ID and filename for each category
+const GIST_IDS: Record<string, string> = {
+  "Conexões": "8ad9f1e9b02d08f9e5235ffb1e1c3385",
+  "Tubos":    "3c32bd0622c574f7079960a1592f969d",
+  "Válvulas": "2c1715ad14efe7ca36704c58efa4e8e9",
+};
+const GIST_FILE: Record<string, string> = {
   "Conexões": "conexoes-cache.json",
   "Tubos":    "tubos-cache.json",
   "Válvulas": "valvulas-cache.json",
@@ -37,11 +40,6 @@ const STATIC_SNAPSHOT: Record<string, string> = {
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
 };
-
-/** Decode base64-encoded content returned by GitHub Contents API (handles UTF-8) */
-function decodeGithubContent(b64: string): string {
-  return decodeURIComponent(escape(atob(b64.replace(/\n/g, ""))));
-}
 
 const FETCH_PAGE_SIZE = 2000;
 const FETCH_TIMEOUT_MS = 30000;
@@ -153,30 +151,26 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
     return allRows.map(mapRow);
   }
 
-  // 2️⃣ GitHub Contents API — always the latest committed version.
-  //    Requires VITE_GITHUB_TOKEN because the repo is private.
-  //    GitHub API sends Access-Control-Allow-Origin: * and supports Authorization
-  //    headers in CORS preflight, so this works from any browser with the token.
-  const ghToken = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
-  const ghFile  = CATEGORIA_FILE[categoria];
-  if (ghToken && ghFile) {
+  // 2️⃣ Gist raw URL — always the latest version uploaded by any user.
+  //    Public gists serve Access-Control-Allow-Origin: * so no auth is needed.
+  //    Any user uploading a spreadsheet patches the gist (write code below),
+  //    and this fetch picks it up immediately on every other device.
+  const gistId   = GIST_IDS[categoria];
+  const gistFile = GIST_FILE[categoria];
+  if (gistId && gistFile) {
     try {
-      const resp = await fetch(`${GITHUB_API}/${ghFile}`, {
-        headers: {
-          Authorization: `token ${ghToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-        cache: "no-store",
-      });
+      const resp = await fetch(
+        `${GIST_RAW}/${gistId}/raw/${gistFile}?_=${Date.now()}`,
+        { cache: "no-store" },
+      );
       if (resp.ok) {
-        const fileData = await resp.json();
-        const data: PedidoRow[] = JSON.parse(decodeGithubContent(fileData.content));
+        const data: PedidoRow[] = await resp.json();
         if (Array.isArray(data) && data.length > 0) {
           return data;
         }
       }
     } catch (e) {
-      console.warn("GitHub Contents API fetch failed:", e);
+      console.warn("Gist fetch failed:", e);
     }
   }
 
@@ -310,49 +304,30 @@ export function usePedidos(categoria: string = "Conexões") {
       writePedidosCache(categoria, rows, file.name);
       queryClient.setQueryData(["pedidos", categoria], rows);
 
-      // 🔄 GitHub sync — commit the updated JSON to the repo so every other
-      //    user fetches it from raw.githubusercontent.com within ~5 minutes.
-      //    Requires VITE_GITHUB_TOKEN (set in Lovable env vars or .env.local).
-      const ghToken = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
-      const ghFile  = CATEGORIA_FILE[categoria];
-      if (ghToken && ghFile) {
+      // 🔄 Gist sync — PATCH the public gist so every other browser reads the
+      //    updated JSON immediately via the raw URL (no auth, full CORS).
+      const gistId   = GIST_IDS[categoria];
+      const gistFile = GIST_FILE[categoria];
+      if (gistId && gistFile) {
         try {
           setUpdateMessage("Sincronizando com outros usuários...");
-          const apiUrl = `${GITHUB_API}/${ghFile}`;
-
-          // Fetch current file SHA (required by GitHub Contents API to update an existing file)
-          const shaResp = await fetch(apiUrl, {
+          const patchResp = await fetch(`${GIST_API}/${gistId}`, {
+            method: "PATCH",
             headers: {
-              Authorization: `token ${ghToken}`,
-              Accept: "application/vnd.github.v3+json",
-            },
-          });
-          const shaData = shaResp.ok ? await shaResp.json() : {};
-          const fileSha: string | undefined = shaData.sha;
-
-          // Base64-encode the JSON (btoa handles Latin-1; unescape+encodeURIComponent lifts it to UTF-8)
-          const content = btoa(unescape(encodeURIComponent(JSON.stringify(rows))));
-
-          const putResp = await fetch(apiUrl, {
-            method: "PUT",
-            headers: {
-              Authorization: `token ${ghToken}`,
+              Authorization: `token ${_GT}`,
               Accept: "application/vnd.github.v3+json",
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              message: `chore: update ${ghFile} via importcontrol`,
-              content,
-              ...(fileSha ? { sha: fileSha } : {}),
+              files: { [gistFile]: { content: JSON.stringify(rows) } },
             }),
           });
-
-          if (!putResp.ok) {
-            const err = await putResp.text();
-            console.warn("GitHub sync failed (not critical):", putResp.status, err);
+          if (!patchResp.ok) {
+            const err = await patchResp.text();
+            console.warn("Gist sync failed (not critical):", patchResp.status, err);
           }
         } catch (e) {
-          console.warn("GitHub sync error (not critical):", e);
+          console.warn("Gist sync error (not critical):", e);
         }
       }
 

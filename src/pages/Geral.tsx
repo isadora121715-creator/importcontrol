@@ -132,10 +132,14 @@ function monthLabel(key: string): string {
 
 // Static JSON snapshots served from the app's own domain (public/data/).
 // Every user who opens the link gets the same pre-loaded data automatically.
-// GitHub Contents API — always latest version, CORS-enabled, requires token.
-// Because the repo is private, raw.githubusercontent.com URLs don't work without auth.
-const GITHUB_API = "https://api.github.com/repos/isadora121715-creator/importcontrol/contents/public/data";
-const GITHUB_FILE: Record<string, string> = {
+// Gist sync — public gists, Access-Control-Allow-Origin: *, no auth for reads.
+const GIST_RAW = "https://gist.githubusercontent.com/isadora121715-creator";
+const GIST_IDS: Record<string, string> = {
+  "Conexões": "8ad9f1e9b02d08f9e5235ffb1e1c3385",
+  "Tubos":    "3c32bd0622c574f7079960a1592f969d",
+  "Válvulas": "2c1715ad14efe7ca36704c58efa4e8e9",
+};
+const GIST_FILE: Record<string, string> = {
   "Conexões": "conexoes-cache.json",
   "Tubos":    "tubos-cache.json",
   "Válvulas": "valvulas-cache.json",
@@ -147,11 +151,6 @@ const STATIC_SNAPSHOT: Record<string, string> = {
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
 };
-
-/** Decode base64-encoded content returned by GitHub Contents API (handles UTF-8) */
-function decodeGithubContent(b64: string): string {
-  return decodeURIComponent(escape(atob(b64.replace(/\n/g, ""))));
-}
 
 // Map camelCase JSON cache rows → PedidoSummary (snake_case)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,30 +186,26 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
     if (data.length < pageSize) break;
   }
 
-  // 2️⃣ GitHub Contents API — always the latest committed version.
-  //    Requires VITE_GITHUB_TOKEN (private repo). GitHub API is CORS-enabled and
-  //    supports the Authorization header from browser fetch calls.
-  const ghToken = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
-  if (all.length === 0 && ghToken) {
+  // 2️⃣ Gist raw URL — always the latest version uploaded by any user.
+  //    Public gists have Access-Control-Allow-Origin: *, no auth needed.
+  if (all.length === 0) {
     await Promise.all(
-      Object.entries(GITHUB_FILE).map(async ([cat, file]) => {
+      Object.entries(GIST_IDS).map(async ([cat, gistId]) => {
+        const file = GIST_FILE[cat];
+        if (!file) return;
         try {
-          const resp = await fetch(`${GITHUB_API}/${file}`, {
-            headers: {
-              Authorization: `token ${ghToken}`,
-              Accept: "application/vnd.github.v3+json",
-            },
-            cache: "no-store",
-          });
+          const resp = await fetch(
+            `${GIST_RAW}/${gistId}/raw/${file}?_=${Date.now()}`,
+            { cache: "no-store" },
+          );
           if (!resp.ok) return;
-          const fileData = await resp.json();
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const rows: any[] = JSON.parse(decodeGithubContent(fileData.content));
+          const rows: any[] = await resp.json();
           if (Array.isArray(rows) && rows.length > 0) {
             all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
           }
         } catch (e) {
-          console.warn("GitHub Contents API fetch failed for", cat, e);
+          console.warn("Gist fetch failed for", cat, e);
         }
       })
     );
