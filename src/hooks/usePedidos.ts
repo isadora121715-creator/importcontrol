@@ -120,33 +120,40 @@ function toDbRow(r: PedidoRow, categoria: string) {
 async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
   const allRows: Record<string, unknown>[] = [];
 
-  for (let from = 0; ; from += FETCH_PAGE_SIZE) {
-    const { data: rows, error } = await withTimeout(
-      supabase
-        .from("pedidos")
-        .select(PEDIDOS_SELECT_COLUMNS)
-        .eq("categoria", categoria)
-        .range(from, from + FETCH_PAGE_SIZE - 1),
-      FETCH_TIMEOUT_MS,
-      "A leitura dos pedidos demorou demais. Tente novamente.",
-    );
+  // 1️⃣ Supabase DB — try first. If RLS blocks or any error occurs, fall through
+  //    to the gist (layer 2) instead of throwing and losing all fallbacks.
+  try {
+    for (let from = 0; ; from += FETCH_PAGE_SIZE) {
+      const { data: rows, error } = await withTimeout(
+        supabase
+          .from("pedidos")
+          .select(PEDIDOS_SELECT_COLUMNS)
+          .eq("categoria", categoria)
+          .range(from, from + FETCH_PAGE_SIZE - 1),
+        FETCH_TIMEOUT_MS,
+        "A leitura dos pedidos demorou demais. Tente novamente.",
+      );
 
-    if (error) {
-      throw new Error("Erro ao carregar dados do banco.");
+      if (error) {
+        // RLS or DB error — fall through to gist / static files below.
+        console.warn("Supabase fetch error (falling through to sync layer):", error.message);
+        break;
+      }
+
+      if (!rows || rows.length === 0) {
+        break;
+      }
+
+      allRows.push(...rows);
+
+      if (rows.length < FETCH_PAGE_SIZE) {
+        break;
+      }
     }
-
-    if (!rows || rows.length === 0) {
-      break;
-    }
-
-    allRows.push(...rows);
-
-    if (rows.length < FETCH_PAGE_SIZE) {
-      break;
-    }
+  } catch (supabaseErr) {
+    console.warn("Supabase unavailable (falling through to sync layer):", supabaseErr);
   }
 
-  // 1️⃣ Supabase DB has data — use it (RLS fixed or data inserted normally).
   if (allRows.length > 0) {
     return allRows.map(mapRow);
   }

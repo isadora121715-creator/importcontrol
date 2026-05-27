@@ -175,15 +175,21 @@ function cacheRowToSummary(r: any, categoria: string): PedidoSummary {
 async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
   const all: PedidoSummary[] = [];
   const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from("pedidos")
-      .select("categoria,status_fornecedor,status_compra_venda,fornecedor,cliente,preco_venda,preco_compra,qty_venda,qty_compra,po,embarque,prazo_cliente,emissao_pedido_sistema")
-      .range(from, from + pageSize - 1);
-    if (error) throw new Error("Erro ao carregar dados consolidados.");
-    if (!data || data.length === 0) break;
-    all.push(...(data as PedidoSummary[]));
-    if (data.length < pageSize) break;
+  // 1️⃣ Supabase — fall through (don't throw) on any error so gist / static
+  //    files can serve as fallback for devices blocked by RLS.
+  try {
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("categoria,status_fornecedor,status_compra_venda,fornecedor,cliente,preco_venda,preco_compra,qty_venda,qty_compra,po,embarque,prazo_cliente,emissao_pedido_sistema")
+        .range(from, from + pageSize - 1);
+      if (error) { console.warn("Supabase Geral error:", error.message); break; }
+      if (!data || data.length === 0) break;
+      all.push(...(data as PedidoSummary[]));
+      if (data.length < pageSize) break;
+    }
+  } catch (e) {
+    console.warn("Supabase Geral unavailable:", e);
   }
 
   // 2️⃣ Gist raw URL — always the latest version uploaded by any user.
