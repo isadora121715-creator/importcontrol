@@ -221,11 +221,13 @@ export function usePedidos(categoria: string = "Conexões") {
     initialData: cachedSnapshot?.rows,
     initialDataUpdatedAt: cachedSnapshot?.timestamp,
     placeholderData: keepPreviousData,
-    staleTime: 5 * 60_000,
+    // 60 s: data older than 1 min is stale → triggers refetch on mount / focus.
+    // This ensures other devices see gist updates within one page load.
+    staleTime: 60_000,
     gcTime: 60 * 60_000,
-    retry: 2,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    retry: 1,
+    refetchOnMount: true,        // refetch when page loads if data is stale
+    refetchOnWindowFocus: true,  // refetch when user switches back to this tab
     refetchOnReconnect: true,
     enabled: !isUpdating,
   });

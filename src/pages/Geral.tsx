@@ -245,10 +245,10 @@ const Geral = () => {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["pedidos-geral-summary"],
     queryFn: fetchAllCategoriesSummary,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,          // re-fetch after 1 min of inactivity
     gcTime: 60 * 60_000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true,       // fetch on every page load if data is stale
+    refetchOnWindowFocus: true, // fetch when user returns to this tab
   });
 
   const [reportDim, setReportDim] = useState<ReportDimension>("mes");
