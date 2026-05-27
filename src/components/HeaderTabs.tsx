@@ -34,14 +34,13 @@ export function HeaderTabs() {
     }`;
 
   const navLinks = [
-    { to: "/dashboard", label: "Conexões", active: isConexoes },
-    { to: "/tubos",     label: "Tubos",    active: isTubos },
-    { to: "/valvulas",  label: "Válvulas", active: isValvulas },
-    { to: "/embarques", label: "Embarques",active: isEmbarques },
-    { to: "/geral",     label: "Geral",    active: isGeral },
-    { to: "/precificacao", label: "Precificação", active: isPrecificacao },
-    { to: "/catalogo",  label: "Catálogo", active: isCatalogo },
-    { to: "/frete",     label: "Frete",    active: isFrete },
+    { to: "/dashboard",   label: "Conexões",    active: isConexoes },
+    { to: "/tubos",       label: "Tubos",       active: isTubos },
+    { to: "/valvulas",    label: "Válvulas",    active: isValvulas },
+    { to: "/geral",       label: "Geral",       active: isGeral },
+    { to: "/precificacao",label: "Precificação",active: isPrecificacao },
+    { to: "/embarques",   label: "Embarques",   active: isEmbarques },
+    { to: "/catalogo",    label: "Catálogo",    active: isCatalogo },
   ];
 
   return (

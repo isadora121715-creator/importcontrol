@@ -1455,11 +1455,11 @@ const Embarques = () => {
             </TabsTrigger>
             <TabsTrigger value="fretes" className="gap-2">
               <Ship className="h-4 w-4" />
-              <span className="hidden sm:inline">Fretes</span>
+              <span className="hidden sm:inline">Internacional</span>
             </TabsTrigger>
             <TabsTrigger value="internacionais" className="gap-2">
               <DollarSign className="h-4 w-4" />
-              <span className="hidden sm:inline">Internacionais</span>
+              <span className="hidden sm:inline">Fretes</span>
             </TabsTrigger>
             <TabsTrigger value="simulador" className="gap-2">
               <Calculator className="h-4 w-4" />
