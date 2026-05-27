@@ -11,35 +11,31 @@ import { toast } from "sonner";
 
 const PEDIDOS_SELECT_COLUMNS = "id,pi,cliente,codigo,codigo_compra,descricao,qty_venda,qty_compra,preco_venda,preco_compra,po,fornecedor,status_fornecedor,status_compra_venda,status_producao,prazo_cliente,dias_faltam,dias_atraso,venda_em_dias,follow_up,chegada_hci,eta,etd,item,embarque,entrega_fornecedor,data_compra,prazo_inicial_fornecedor,emissao_pedido_sistema,data_recebimento_compra";
 
-// Static JSON snapshots bundled with the app (public/data/).
-// Served from the app's own domain — no external dependency, works for every user.
-const GITHUB_SNAPSHOT: Record<string, string> = {
+// ── GitHub sync ────────────────────────────────────────────────────────────
+// Cross-user live sync: when any user uploads a spreadsheet the app commits
+// the updated JSON directly to the GitHub repo via the Contents API.
+// Every other user then reads the latest version from raw.githubusercontent.com
+// (full CORS support, no auth required for reads).
+//
+// The GitHub token is read from VITE_GITHUB_TOKEN (Lovable env var / .env.local).
+// Without the token uploads still work locally via localStorage cache; syncing
+// to other users won't happen until the token is configured.
+const GITHUB_REPO  = "isadora121715-creator/importcontrol";
+const GITHUB_RAW   = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/public/data`;
+const GITHUB_API   = `https://api.github.com/repos/${GITHUB_REPO}/contents/public/data`;
+
+// JSON file name for each category (must match public/data/ filenames)
+const CATEGORIA_FILE: Record<string, string> = {
+  "Conexões": "conexoes-cache.json",
+  "Tubos":    "tubos-cache.json",
+  "Válvulas": "valvulas-cache.json",
+};
+
+// Static fallback — served from the app's own domain, always works.
+const STATIC_SNAPSHOT: Record<string, string> = {
   "Conexões": "/data/conexoes-cache.json",
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
-};
-
-// JSONBlob IDs — free public JSON storage used for cross-user live sync.
-// When any user uploads a spreadsheet the JSON is PUT to the blob so every
-// other browser fetches the latest version immediately, without a new deploy.
-// GET /api/jsonBlob/{id}  — public, no auth
-// PUT /api/jsonBlob/{id}  — public, no auth (only the ID is the "key")
-const JSONBLOB_BASE = "https://jsonblob.com/api/jsonBlob";
-const JSONBLOB_IDS: Record<string, string> = {
-  "Conexões": "019e66a9-d994-7c78-b837-07ce109280cc",
-  "Tubos":    "019e66aa-305b-7623-9e1d-8f31663f688c",
-  "Válvulas": "019e66aa-3409-73e0-8d4f-24c348004906",
-};
-
-// Supabase Storage bucket (future use — requires one-time admin setup).
-const STORAGE_BUCKET = "pedidos-json";
-const STORAGE_BASE_URL =
-  "https://hsyohvptriadxflghrlb.supabase.co/storage/v1/object/public/" + STORAGE_BUCKET;
-const CATEGORIA_SLUG: Record<string, string> = {
-  "Conexões":  "conexoes",
-  "Tubos":     "tubos",
-  "Válvulas":  "valvulas",
-  "Embarques": "embarques",
 };
 
 const FETCH_PAGE_SIZE = 2000;
@@ -152,15 +148,16 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
     return allRows.map(mapRow);
   }
 
-  // 2️⃣ JSONBlob — live JSON store updated by any user via the web app.
-  //    No auth required to read or write. PUT replaces the blob, GET fetches it.
-  //    This is the cross-user sync layer: whoever uploads a spreadsheet writes
-  //    here and everyone else immediately reads the updated version.
-  const blobId = JSONBLOB_IDS[categoria];
-  if (blobId) {
+  // 2️⃣ GitHub raw URL — always the latest committed version.
+  //    raw.githubusercontent.com sends Access-Control-Allow-Origin: * so this
+  //    works from any browser without auth. When a user uploads a spreadsheet,
+  //    the app commits the new JSON to the repo via the Contents API (layer below)
+  //    and this fetch picks it up within ~5 minutes (GitHub CDN propagation).
+  const ghFile = CATEGORIA_FILE[categoria];
+  if (ghFile) {
     try {
-      const resp = await fetch(`${JSONBLOB_BASE}/${blobId}`, {
-        headers: { Accept: "application/json" },
+      const resp = await fetch(`${GITHUB_RAW}/${ghFile}?_=${Date.now()}`, {
+        cache: "no-store",
       });
       if (resp.ok) {
         const data: PedidoRow[] = await resp.json();
@@ -169,13 +166,12 @@ async function fetchAllPedidos(categoria: string): Promise<PedidoRow[]> {
         }
       }
     } catch (e) {
-      console.warn("JSONBlob fetch failed:", e);
+      console.warn("GitHub raw fetch failed:", e);
     }
   }
 
-  // 3️⃣ Static snapshot bundled with the app (public/data/).
-  //    Serves as baseline for every user before anyone has uploaded a spreadsheet.
-  const snapshotUrl = GITHUB_SNAPSHOT[categoria];
+  // 3️⃣ Static snapshot bundled at last deploy (absolute fallback — never fails).
+  const snapshotUrl = STATIC_SNAPSHOT[categoria];
   if (snapshotUrl) {
     try {
       const resp = await fetch(snapshotUrl);
@@ -304,21 +300,49 @@ export function usePedidos(categoria: string = "Conexões") {
       writePedidosCache(categoria, rows, file.name);
       queryClient.setQueryData(["pedidos", categoria], rows);
 
-      // 🔄 JSONBlob sync — PUT the updated JSON so every other browser fetches it immediately.
-      const blobId = JSONBLOB_IDS[categoria];
-      if (blobId) {
+      // 🔄 GitHub sync — commit the updated JSON to the repo so every other
+      //    user fetches it from raw.githubusercontent.com within ~5 minutes.
+      //    Requires VITE_GITHUB_TOKEN (set in Lovable env vars or .env.local).
+      const ghToken = import.meta.env.VITE_GITHUB_TOKEN as string | undefined;
+      const ghFile  = CATEGORIA_FILE[categoria];
+      if (ghToken && ghFile) {
         try {
           setUpdateMessage("Sincronizando com outros usuários...");
-          const syncResp = await fetch(`${JSONBLOB_BASE}/${blobId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(rows),
+          const apiUrl = `${GITHUB_API}/${ghFile}`;
+
+          // Fetch current file SHA (required by GitHub Contents API to update an existing file)
+          const shaResp = await fetch(apiUrl, {
+            headers: {
+              Authorization: `token ${ghToken}`,
+              Accept: "application/vnd.github.v3+json",
+            },
           });
-          if (!syncResp.ok) {
-            console.warn("JSONBlob sync failed (not critical):", syncResp.status);
+          const shaData = shaResp.ok ? await shaResp.json() : {};
+          const fileSha: string | undefined = shaData.sha;
+
+          // Base64-encode the JSON (btoa handles Latin-1; unescape+encodeURIComponent lifts it to UTF-8)
+          const content = btoa(unescape(encodeURIComponent(JSON.stringify(rows))));
+
+          const putResp = await fetch(apiUrl, {
+            method: "PUT",
+            headers: {
+              Authorization: `token ${ghToken}`,
+              Accept: "application/vnd.github.v3+json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message: `chore: update ${ghFile} via importcontrol`,
+              content,
+              ...(fileSha ? { sha: fileSha } : {}),
+            }),
+          });
+
+          if (!putResp.ok) {
+            const err = await putResp.text();
+            console.warn("GitHub sync failed (not critical):", putResp.status, err);
           }
         } catch (e) {
-          console.warn("JSONBlob sync error (not critical):", e);
+          console.warn("GitHub sync error (not critical):", e);
         }
       }
 

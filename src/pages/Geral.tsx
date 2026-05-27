@@ -132,18 +132,19 @@ function monthLabel(key: string): string {
 
 // Static JSON snapshots served from the app's own domain (public/data/).
 // Every user who opens the link gets the same pre-loaded data automatically.
-const GITHUB_SNAPSHOT: Record<string, string> = {
+// GitHub raw URL — full CORS support, no auth required, always latest commit.
+const GITHUB_RAW = "https://raw.githubusercontent.com/isadora121715-creator/importcontrol/main/public/data";
+const GITHUB_FILE: Record<string, string> = {
+  "Conexões": "conexoes-cache.json",
+  "Tubos":    "tubos-cache.json",
+  "Válvulas": "valvulas-cache.json",
+};
+
+// Static fallback served from the app's own domain (last deploy snapshot).
+const STATIC_SNAPSHOT: Record<string, string> = {
   "Conexões": "/data/conexoes-cache.json",
   "Tubos":    "/data/tubos-cache.json",
   "Válvulas": "/data/valvulas-cache.json",
-};
-
-// JSONBlob — live JSON store, no auth, updated by any user via the web app.
-const JSONBLOB_BASE = "https://jsonblob.com/api/jsonBlob";
-const JSONBLOB_IDS: Record<string, string> = {
-  "Conexões": "019e66a9-d994-7c78-b837-07ce109280cc",
-  "Tubos":    "019e66aa-305b-7623-9e1d-8f31663f688c",
-  "Válvulas": "019e66aa-3409-73e0-8d4f-24c348004906",
 };
 
 // Map camelCase JSON cache rows → PedidoSummary (snake_case)
@@ -180,13 +181,14 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
     if (data.length < pageSize) break;
   }
 
-  // 2️⃣ JSONBlob — live JSON updated by any user via the web app (cross-user sync).
+  // 2️⃣ GitHub raw URL — always the latest committed version, full CORS support.
+  //    Picks up updates committed by any user via the Contents API within ~5 min.
   if (all.length === 0) {
     await Promise.all(
-      Object.entries(JSONBLOB_IDS).map(async ([cat, blobId]) => {
+      Object.entries(GITHUB_FILE).map(async ([cat, file]) => {
         try {
-          const resp = await fetch(`${JSONBLOB_BASE}/${blobId}`, {
-            headers: { Accept: "application/json" },
+          const resp = await fetch(`${GITHUB_RAW}/${file}?_=${Date.now()}`, {
+            cache: "no-store",
           });
           if (!resp.ok) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -195,16 +197,16 @@ async function fetchAllCategoriesSummary(): Promise<PedidoSummary[]> {
             all.push(...rows.map((r) => cacheRowToSummary(r, cat)));
           }
         } catch (e) {
-          console.warn("JSONBlob fetch failed for", cat, e);
+          console.warn("GitHub raw fetch failed for", cat, e);
         }
       })
     );
   }
 
-  // 3️⃣ Static snapshots bundled with the app — baseline before any upload.
+  // 3️⃣ Static snapshots bundled at last deploy (absolute fallback — never fails).
   if (all.length === 0) {
     await Promise.all(
-      Object.entries(GITHUB_SNAPSHOT).map(async ([cat, url]) => {
+      Object.entries(STATIC_SNAPSHOT).map(async ([cat, url]) => {
         try {
           const resp = await fetch(url);
           if (!resp.ok) return;
