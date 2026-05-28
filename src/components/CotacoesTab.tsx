@@ -7,12 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   FileText, Search, Upload, RefreshCw, X, Check, ChevronDown,
   ChevronUp, ChevronLeft, ChevronRight, Loader2, Users, Tag,
-  CalendarDays,
+  CalendarDays, Ruler, Layers,
 } from "lucide-react";
 
 // ── Gist config ───────────────────────────────────────────────────────────────
@@ -85,33 +88,67 @@ function parseDate(d: string | null | undefined): Date | null {
   return isNaN(dt.getTime()) ? null : dt;
 }
 
-// ── MultiSelect ───────────────────────────────────────────────────────────────
+function getBest(r: CotacaoRow) {
+  const bestPreco = r.menorPreco ??
+    (r.fornecedores.length > 0
+      ? (r.fornecedores.filter((f) => f.preco != null).sort((a, b) => (a.preco! - b.preco!))[0]?.preco ?? null)
+      : null);
+  const bestForn = r.fornecedorMenorPreco ??
+    (r.fornecedores.find((f) => f.preco === bestPreco)?.nome ?? null);
+  return { bestPreco, bestForn };
+}
+
+// ── Searchable MultiSelect ────────────────────────────────────────────────────
 function MultiSelect({
-  options, value, onChange, placeholder, maxWidth = "w-[150px]",
+  options, value, onChange, placeholder, maxWidth = "w-[150px]", searchable = false,
 }: {
   options: string[]; value: string[]; onChange: (v: string[]) => void;
-  placeholder: string; maxWidth?: string;
+  placeholder: string; maxWidth?: string; searchable?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen]   = useState(false);
+  const [q, setQ]         = useState("");
+  const ref               = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQ(""); }
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
+
   const toggle = (o: string) => onChange(value.includes(o) ? value.filter((v) => v !== o) : [...value, o]);
-  const label = value.length === 0 ? placeholder : value.length === 1 ? value[0] : `${value.length} selecionados`;
+  const label  = value.length === 0 ? placeholder : value.length === 1 ? value[0] : `${value.length} selecionados`;
+  const visible = searchable && q ? options.filter((o) => o.toLowerCase().includes(q.toLowerCase())) : options;
+
   return (
     <div ref={ref} className={`relative ${maxWidth}`}>
-      <button type="button" onClick={() => setOpen((o) => !o)}
+      <button type="button" onClick={() => { setOpen((o) => !o); setQ(""); }}
         className={`flex h-9 w-full items-center justify-between gap-1 rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-accent/30 focus:outline-none ${value.length > 0 ? "border-primary/60 text-foreground" : "text-muted-foreground"}`}>
         <span className="truncate">{label}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 opacity-50 transition-transform ${open ? "rotate-180" : ""}`}/>
       </button>
+
       {open && (
-        <div className="absolute z-50 top-[calc(100%+4px)] left-0 min-w-full w-max max-w-[260px] max-h-64 overflow-y-auto rounded-md border bg-popover shadow-md">
-          <div className="p-1">
-            {options.map((o) => (
+        <div className="absolute z-50 top-[calc(100%+4px)] left-0 min-w-full w-max max-w-[280px] max-h-72 flex flex-col rounded-md border bg-popover shadow-md">
+          {searchable && (
+            <div className="p-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground"/>
+                <input
+                  autoFocus
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Pesquisar..."
+                  className="w-full h-7 pl-6 pr-2 text-xs bg-muted/40 rounded border border-input focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+            </div>
+          )}
+          <div className="overflow-y-auto flex-1 p-1">
+            {visible.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-2 py-3 text-center">Nenhum resultado</p>
+            ) : visible.map((o) => (
               <div key={o} onClick={() => toggle(o)}
                 className="flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent select-none">
                 <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${value.includes(o) ? "bg-primary border-primary text-primary-foreground" : "border-input"}`}>
@@ -122,13 +159,122 @@ function MultiSelect({
             ))}
           </div>
           {value.length > 0 && (
-            <div onClick={() => onChange([])} className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-accent text-muted-foreground border-t">
+            <div onClick={() => { onChange([]); setQ(""); }}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-accent text-muted-foreground border-t shrink-0">
               <X className="h-3 w-3"/> Limpar seleção
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+// ── Detail Modal ──────────────────────────────────────────────────────────────
+function CotacaoDetail({ row, onClose }: { row: CotacaoRow; onClose: () => void }) {
+  const { bestPreco, bestForn } = getBest(row);
+
+  const field = (label: string, value: string | number | null | undefined) => (
+    value != null && value !== "" && value !== "—" ? (
+      <div className="space-y-0.5">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className="text-sm font-medium">{String(value)}</p>
+      </div>
+    ) : null
+  );
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-xs font-semibold">
+              {SHEET_LABELS[row.sheet] ?? row.sheet}
+            </Badge>
+            <span className="font-mono text-base">{row.codigo ?? row.rfq ?? "—"}</span>
+            {row.dataCotacao && (
+              <span className="text-sm text-muted-foreground font-normal">{fmtDate(row.dataCotacao)}</span>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 pt-1">
+          {/* Product name */}
+          {row.product && (
+            <div className="bg-muted/30 rounded-lg px-4 py-3">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Produto</p>
+              <p className="text-base font-semibold">{row.product}</p>
+            </div>
+          )}
+
+          {/* Two-column grid: specs + client */}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+            {field("Código", row.codigo)}
+            {field("RFQ", row.rfq)}
+            {field("Cliente", row.cliente)}
+            {field("PI", row.pi)}
+            {field("OP", row.op)}
+            {field("Tipo Material", row.tipoMaterial)}
+            {field("DN", row.dn)}
+            {field("Classe", row.classe)}
+            {field("SCH / THK", row.sch)}
+            {field("Material", row.material)}
+            {field("Quantidade", row.qty)}
+            {field("Data Cotação", fmtDate(row.dataCotacao))}
+          </div>
+
+          {/* Observações */}
+          {row.obs && (
+            <div className="bg-muted/20 rounded-md px-3 py-2 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Obs: </span>{row.obs}
+            </div>
+          )}
+
+          {/* Fornecedores table */}
+          {row.fornecedores.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold mb-2">Fornecedores</p>
+              <div className="rounded-md border border-border/50 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="text-xs">Fornecedor</TableHead>
+                      <TableHead className="text-xs text-right">Preço</TableHead>
+                      <TableHead className="text-xs">Data Receb.</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {row.fornecedores.map((f, i) => (
+                      <TableRow key={i} className={`text-sm ${f.nome === bestForn ? "bg-emerald-500/5" : ""}`}>
+                        <TableCell className="font-medium">
+                          {f.nome}
+                          {f.nome === bestForn && bestPreco != null && (
+                            <Badge className="ml-2 bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px]">
+                              Menor preço
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className={`text-right font-semibold ${f.nome === bestForn ? "text-emerald-400" : ""}`}>
+                          {fmtPreco(f.preco)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{fmtDate(f.data)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {bestPreco != null && (
+                <div className="mt-2 flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 rounded-md px-4 py-2.5">
+                  <span className="text-sm font-medium">Menor Preço — {bestForn ?? "—"}</span>
+                  <span className="text-lg font-bold text-emerald-400">{fmtPreco(bestPreco)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -177,7 +323,9 @@ function UploadPanel({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         />
         <div onClick={() => !uploading && fileRef.current?.click()}
           className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${uploading ? "opacity-60 cursor-not-allowed border-border/30" : "border-border/50 hover:border-primary/50"}`}>
-          {uploading ? <Loader2 className="h-7 w-7 mx-auto mb-1.5 text-muted-foreground animate-spin"/> : <Upload className="h-7 w-7 mx-auto mb-1.5 text-muted-foreground"/>}
+          {uploading
+            ? <Loader2 className="h-7 w-7 mx-auto mb-1.5 text-muted-foreground animate-spin"/>
+            : <Upload className="h-7 w-7 mx-auto mb-1.5 text-muted-foreground"/>}
           <p className="text-sm font-medium">{uploading ? "Processando..." : "Clique para selecionar o arquivo .xlsx"}</p>
         </div>
         {!uploading && (
@@ -210,52 +358,67 @@ export function CotacoesTab() {
 
   const rows = data ?? [];
 
-  const [showUpload,   setShowUpload]   = useState(false);
-  const [search,       setSearch]       = useState("");
-  const [filterSheet,  setFilterSheet]  = useState<string[]>([]);
-  const [filterCliente,setFilterCliente]= useState<string[]>([]);
-  const [filterTipo,   setFilterTipo]   = useState<string[]>([]);
-  const [filterYear,   setFilterYear]   = useState<string[]>([]);
-  const [showAll,      setShowAll]      = useState(false);
-  const [page,         setPage]         = useState(1);
+  const [showUpload,    setShowUpload]    = useState(false);
+  const [selectedRow,   setSelectedRow]   = useState<CotacaoRow | null>(null);
+  const [search,        setSearch]        = useState("");
+  const [filterSheet,   setFilterSheet]   = useState<string[]>([]);
+  const [filterCliente, setFilterCliente] = useState<string[]>([]);
+  const [filterTipo,    setFilterTipo]    = useState<string[]>([]);
+  const [filterDN,      setFilterDN]      = useState<string[]>([]);
+  const [filterMaterial,setFilterMaterial]= useState<string[]>([]);
+  const [filterYear,    setFilterYear]    = useState<string[]>([]);
+  const [showAll,       setShowAll]       = useState(false);
+  const [page,          setPage]          = useState(1);
 
   function handleUploadSuccess(newRows: CotacaoRow[]) {
     qc.setQueryData(["cotacoes"], newRows);
   }
 
-  // Dropdown options (from all rows)
-  const sheetOptions  = SHEET_ORDER.filter((s) => rows.some((r) => r.sheet === s));
-  const clienteOpts   = useMemo(() => Array.from(new Set(rows.map((r) => r.cliente).filter(Boolean))).sort() as string[], [rows]);
-  const tipoOpts      = useMemo(() => Array.from(new Set(rows.map((r) => r.tipoMaterial).filter(Boolean))).sort() as string[], [rows]);
-  const yearOpts      = useMemo(() => {
+  // Dropdown options (always from full rows)
+  const sheetOptions   = SHEET_ORDER.filter((s) => rows.some((r) => r.sheet === s));
+  const clienteOpts    = useMemo(() => Array.from(new Set(rows.map((r) => r.cliente).filter(Boolean))).sort() as string[], [rows]);
+  const tipoOpts       = useMemo(() => Array.from(new Set(rows.map((r) => r.tipoMaterial).filter(Boolean))).sort() as string[], [rows]);
+  const yearOpts       = useMemo(() => {
     const s = new Set<string>();
     rows.forEach((r) => { const d = parseDate(r.dataCotacao); if (d) s.add(String(d.getFullYear())); });
     return Array.from(s).sort().reverse();
   }, [rows]);
+  const dnOpts         = useMemo(() => Array.from(new Set(rows.map((r) => r.dn).filter(Boolean))).sort((a, b) => {
+    // Sort numerically by extracting the first number
+    const na = parseFloat((a as string).replace(/[^\d.]/g, "")) || 0;
+    const nb = parseFloat((b as string).replace(/[^\d.]/g, "")) || 0;
+    return na - nb;
+  }) as string[], [rows]);
+  const materialOpts   = useMemo(() => Array.from(new Set(rows.map((r) => r.material).filter(Boolean))).sort() as string[], [rows]);
 
-  const anyFilter = !!(search || filterSheet.length || filterCliente.length || filterTipo.length || filterYear.length);
-  const reset = () => { setSearch(""); setFilterSheet([]); setFilterCliente([]); setFilterTipo([]); setFilterYear([]); setShowAll(false); setPage(1); };
+  const anyFilter = !!(search || filterSheet.length || filterCliente.length || filterTipo.length || filterDN.length || filterMaterial.length || filterYear.length);
+  const reset = () => {
+    setSearch(""); setFilterSheet([]); setFilterCliente([]); setFilterTipo([]);
+    setFilterDN([]); setFilterMaterial([]); setFilterYear([]); setShowAll(false); setPage(1);
+  };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((r) => {
-      if (filterSheet.length   && !filterSheet.includes(r.sheet))                return false;
-      if (filterCliente.length && !filterCliente.includes(r.cliente ?? ""))      return false;
-      if (filterTipo.length    && !filterTipo.includes(r.tipoMaterial ?? ""))    return false;
+      if (filterSheet.length    && !filterSheet.includes(r.sheet))                  return false;
+      if (filterCliente.length  && !filterCliente.includes(r.cliente ?? ""))        return false;
+      if (filterTipo.length     && !filterTipo.includes(r.tipoMaterial ?? ""))      return false;
+      if (filterDN.length       && !filterDN.includes(r.dn ?? ""))                  return false;
+      if (filterMaterial.length && !filterMaterial.includes(r.material ?? ""))      return false;
       if (filterYear.length) {
         const d = parseDate(r.dataCotacao);
         if (!d || !filterYear.includes(String(d.getFullYear()))) return false;
       }
-      if (q && !`${r.rfq} ${r.codigo} ${r.product} ${r.cliente} ${r.dn} ${r.material}`.toLowerCase().includes(q)) return false;
+      if (q && !`${r.rfq} ${r.codigo} ${r.product} ${r.cliente} ${r.dn} ${r.material} ${r.classe}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [rows, search, filterSheet, filterCliente, filterTipo, filterYear]);
+  }, [rows, search, filterSheet, filterCliente, filterTipo, filterDN, filterMaterial, filterYear]);
 
   const cf = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setShowAll(false); setPage(1); };
 
   // Summary stats
-  const totalForn = useMemo(() => new Set(rows.flatMap((r) => r.fornecedores.map((f) => f.nome))).size, [rows]);
-  const comPreco  = useMemo(() => rows.filter((r) => r.menorPreco != null || r.fornecedores.some((f) => f.preco != null)).length, [rows]);
+  const totalForn    = useMemo(() => new Set(rows.flatMap((r) => r.fornecedores.map((f) => f.nome))).size, [rows]);
+  const comPreco     = useMemo(() => rows.filter((r) => r.menorPreco != null || r.fornecedores.some((f) => f.preco != null)).length, [rows]);
   const countBySheet = useMemo(() => {
     const m: Record<string, number> = {};
     rows.forEach((r) => { m[r.sheet] = (m[r.sheet] ?? 0) + 1; });
@@ -267,11 +430,18 @@ export function CotacoesTab() {
     ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : filtered.slice(0, INITIAL_ROWS);
 
-  if (isLoading) return <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin"/><span>Carregando cotações...</span></div>;
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin"/><span>Carregando cotações...</span>
+    </div>
+  );
   if (error) return <div className="text-center py-20 text-red-400">Erro ao carregar cotações.</div>;
 
   return (
     <div className="space-y-5">
+      {/* Detail modal */}
+      {selectedRow && <CotacaoDetail row={selectedRow} onClose={() => setSelectedRow(null)}/>}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -345,24 +515,44 @@ export function CotacoesTab() {
         ))}
       </div>
 
-      {/* Search + filters */}
+      {/* Filter row 1: search + cliente + tipo + ano */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
-          <Input placeholder="Buscar RFQ, código, produto, DN, material..." value={search} onChange={(e) => { setSearch(e.target.value); setShowAll(false); setPage(1); }} className="pl-8 h-9 text-sm"/>
+          <Input placeholder="Buscar RFQ, código, produto, DN, material..."
+            value={search} onChange={(e) => { setSearch(e.target.value); setShowAll(false); setPage(1); }}
+            className="pl-8 h-9 text-sm"/>
         </div>
-        <MultiSelect options={clienteOpts} value={filterCliente} onChange={cf(setFilterCliente)} placeholder="Cliente" maxWidth="w-[150px]"/>
-        <MultiSelect options={tipoOpts}    value={filterTipo}    onChange={cf(setFilterTipo)}    placeholder="Tipo Material" maxWidth="w-[145px]"/>
+        <MultiSelect options={clienteOpts} value={filterCliente} onChange={cf(setFilterCliente)}
+          placeholder="Cliente" maxWidth="w-[150px]" searchable={clienteOpts.length > 10}/>
+        <MultiSelect options={tipoOpts} value={filterTipo} onChange={cf(setFilterTipo)}
+          placeholder="Tipo Material" maxWidth="w-[145px]"/>
         <div className="flex items-center gap-1.5">
           <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0"/>
-          <MultiSelect options={yearOpts} value={filterYear} onChange={cf(setFilterYear)} placeholder="Ano" maxWidth="w-[110px]"/>
+          <MultiSelect options={yearOpts} value={filterYear} onChange={cf(setFilterYear)}
+            placeholder="Ano" maxWidth="w-[110px]"/>
         </div>
-        {anyFilter && <Button variant="ghost" size="sm" className="h-9" onClick={reset}>Limpar</Button>}
+      </div>
+
+      {/* Filter row 2: DN + material + clear */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex items-center gap-1.5">
+          <Ruler className="h-4 w-4 text-muted-foreground shrink-0"/>
+          <MultiSelect options={dnOpts} value={filterDN} onChange={cf(setFilterDN)}
+            placeholder="DN" maxWidth="w-[120px]" searchable={dnOpts.length > 10}/>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Layers className="h-4 w-4 text-muted-foreground shrink-0"/>
+          <MultiSelect options={materialOpts} value={filterMaterial} onChange={cf(setFilterMaterial)}
+            placeholder="Material" maxWidth="w-[155px]" searchable={materialOpts.length > 10}/>
+        </div>
+        {anyFilter && <Button variant="ghost" size="sm" className="h-9" onClick={reset}>Limpar tudo</Button>}
       </div>
 
       <p className="text-xs text-muted-foreground">
         {filtered.length.toLocaleString("pt-BR")} registros encontrados{filtered.length !== rows.length && ` (de ${rows.length.toLocaleString("pt-BR")} total)`}
         {!showAll && filtered.length > INITIAL_ROWS && ` — exibindo os primeiros ${INITIAL_ROWS}`}
+        {" "}<span className="opacity-60">· clique em uma linha para ver detalhes</span>
       </p>
 
       {/* Table */}
@@ -371,7 +561,7 @@ export function CotacoesTab() {
           <TableHeader>
             <TableRow className="bg-muted/30">
               <TableHead className="text-xs w-[90px]">Tipo</TableHead>
-              <TableHead className="text-xs w-[130px]">Data Cotação</TableHead>
+              <TableHead className="text-xs w-[100px]">Data</TableHead>
               <TableHead className="text-xs">RFQ</TableHead>
               <TableHead className="text-xs">Cliente</TableHead>
               <TableHead className="text-xs">Código</TableHead>
@@ -388,13 +578,12 @@ export function CotacoesTab() {
             {displayed.length === 0 ? (
               <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-10">Nenhum registro encontrado</TableCell></TableRow>
             ) : displayed.map((r, i) => {
-              const bestPreco = r.menorPreco ?? (r.fornecedores.length > 0
-                ? Math.min(...r.fornecedores.filter((f) => f.preco != null).map((f) => f.preco!))
-                : null);
-              const bestForn = r.fornecedorMenorPreco
-                ?? (r.fornecedores.find((f) => f.preco === bestPreco)?.nome ?? null);
+              const { bestPreco, bestForn } = getBest(r);
               return (
-                <TableRow key={i} className="text-xs hover:bg-muted/30">
+                <TableRow key={i}
+                  className="text-xs hover:bg-muted/40 cursor-pointer transition-colors"
+                  onClick={() => setSelectedRow(r)}
+                >
                   <TableCell>
                     <Badge variant="outline" className="text-[10px] font-medium whitespace-nowrap">
                       {SHEET_LABELS[r.sheet] ?? r.sheet}
@@ -402,26 +591,28 @@ export function CotacoesTab() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{fmtDate(r.dataCotacao)}</TableCell>
                   <TableCell className="font-mono max-w-[120px] truncate" title={r.rfq ?? undefined}>{r.rfq ?? "—"}</TableCell>
-                  <TableCell className="max-w-[130px] truncate" title={r.cliente ?? undefined}>{r.cliente ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-xs max-w-[120px] truncate" title={r.codigo ?? undefined}>{r.codigo ?? "—"}</TableCell>
+                  <TableCell className="max-w-[120px] truncate" title={r.cliente ?? undefined}>{r.cliente ?? "—"}</TableCell>
+                  <TableCell className="font-mono max-w-[110px] truncate" title={r.codigo ?? undefined}>{r.codigo ?? "—"}</TableCell>
                   <TableCell className="max-w-[160px] truncate" title={r.product ?? undefined}>{r.product ?? "—"}</TableCell>
                   <TableCell className="font-mono">{r.dn ?? "—"}</TableCell>
                   <TableCell>{r.classe ?? "—"}</TableCell>
-                  <TableCell className="max-w-[120px] truncate text-muted-foreground" title={r.material ?? undefined}>{r.material ?? "—"}</TableCell>
+                  <TableCell className="max-w-[110px] truncate text-muted-foreground" title={r.material ?? undefined}>{r.material ?? "—"}</TableCell>
                   <TableCell className="text-center">{r.qty != null ? r.qty : "—"}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1 max-w-[200px]">
                       {r.fornecedores.length === 0
                         ? <span className="text-muted-foreground">—</span>
                         : r.fornecedores.slice(0, 3).map((f, fi) => (
-                          <span key={fi} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${f.nome === bestForn ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-muted text-muted-foreground"}`}
-                            title={f.preco != null ? fmtPreco(f.preco) : undefined}>
+                          <span key={fi}
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${f.nome === bestForn ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-muted text-muted-foreground"}`}>
                             {f.nome}
                             {f.preco != null && <span className="ml-1 opacity-70">{fmtPreco(f.preco)}</span>}
                           </span>
                         ))
                       }
-                      {r.fornecedores.length > 3 && <span className="text-[10px] text-muted-foreground">+{r.fornecedores.length - 3}</span>}
+                      {r.fornecedores.length > 3 && (
+                        <span className="text-[10px] text-muted-foreground">+{r.fornecedores.length - 3}</span>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-semibold text-emerald-400">{fmtPreco(bestPreco)}</TableCell>
