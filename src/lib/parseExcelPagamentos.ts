@@ -95,7 +95,7 @@ function normStatusDes(v: unknown): string {
 // ── MATERIAL sheet ────────────────────────────────────────────────────────────
 // Col indices (0-based): A=0 PGTO · D=3 BANCO · E=4 TIPO · F=5 PAYMENT
 // G=6 COMPANY · H=7 EXPORTER · I=8 PO · J=9 PE · K=10 MOEDA · L=11 VALOR
-// M=12 LANÇ.SISTEMA · N=13 REAIS · O=14 1ºVENC · Q=16 VENC.ALT · R=17 CLIENTE
+// M=12 LANÇ.SISTEMA (used as reais) · N=13 REAIS · O=14 1ºVENC · Q=16 VENC.ALT · R=17 CLIENTE
 // T=19 DATA PAGTO · X=23 STATUS
 export function parseMaterialSheet(ws: XLSX.WorkSheet): MatRow[] {
   const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null });
@@ -114,7 +114,7 @@ export function parseMaterialSheet(ws: XLSX.WorkSheet): MatRow[] {
       pe:                 fmtStr(r[9]),
       moeda:              fmtStr(r[10]),
       valor:              fmtNum(r[11]),
-      reais:              fmtNum(r[13]),
+      reais:              fmtNum(r[12]), // M=12 LANÇ.SISTEMA
       primeiroVencimento: fmtDate(r[14]),
       vencAlterado:       fmtDate(r[16]),
       cliente:            fmtStr(r[17]),
@@ -128,7 +128,7 @@ export function parseMaterialSheet(ws: XLSX.WorkSheet): MatRow[] {
 // ── DESEMBARAÇO sheet ─────────────────────────────────────────────────────────
 // Col indices: A=0 PAGTO · B=1 TIPO · G=6 MODALIDADE · H=7 EMPRESA
 // I=8 EXPORTADOR · J=9 PO · K=10 PE · L=11 MOEDA · M=12 VALOR
-// O=14 LANÇ.SISTEMA · P=15 REAIS · Q=16 VENCIMENTO · R=17 VENC.ALT
+// O=14 LANÇ.SISTEMA (used as reais) · P=15 REAIS · Q=16 VENCIMENTO · R=17 VENC.ALT
 // T=19 CLIENTE · U=20 DATA PAGTO · V=21 STATUS
 export function parseDesembaracoSheet(ws: XLSX.WorkSheet): DesRow[] {
   const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null });
@@ -146,7 +146,7 @@ export function parseDesembaracoSheet(ws: XLSX.WorkSheet): DesRow[] {
       pe:         fmtStr(r[10]),
       moeda:      fmtStr(r[11]),
       valor:      fmtNum(r[12]),
-      reais:      fmtNum(r[15]),
+      reais:      fmtNum(r[14]), // O=14 LANÇ.SISTEMA
       vencimento: fmtDate(r[16]),
       vencAlterado: fmtDate(r[17]),
       cliente:    fmtStr(r[19]),
