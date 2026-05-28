@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { usePageState } from "@/hooks/usePageState";
 import staticCatalogo from "@/data/catalogo-static.json";
+import { CotacoesTab } from "@/components/CotacoesTab";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -26,7 +27,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Trash2, Download, RefreshCw, Loader2, FileDown } from "lucide-react";
+import { Search, Plus, Trash2, Download, RefreshCw, Loader2, FileDown, ClipboardList, BookOpen } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   readCatalogoComPedidos,
@@ -499,6 +501,27 @@ export default function Catalogo() {
 
       <main className="mx-auto max-w-[1600px] px-6 py-6 space-y-6">
 
+        {/* ── Top-level sub-tab selector ──────────────────────────────────── */}
+        <Tabs defaultValue="catalogo" className="w-full">
+          <TabsList className="h-9 mb-2">
+            <TabsTrigger value="catalogo" className="gap-2 text-sm">
+              <BookOpen className="h-3.5 w-3.5"/>
+              Catálogo de Materiais
+            </TabsTrigger>
+            <TabsTrigger value="cotacoes" className="gap-2 text-sm">
+              <ClipboardList className="h-3.5 w-3.5"/>
+              Cotações
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ── COTAÇÕES tab ──────────────────────────────────────────────── */}
+          <TabsContent value="cotacoes" className="mt-2">
+            <CotacoesTab />
+          </TabsContent>
+
+          {/* ── CATÁLOGO tab ──────────────────────────────────────────────── */}
+          <TabsContent value="catalogo" className="mt-2 space-y-6">
+
         {/* ── Header row ─────────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -665,6 +688,10 @@ export default function Catalogo() {
             Exibindo {filtered.length} de {catalog.length} itens
           </p>
         )}
+
+          </TabsContent>{/* end catalogo TabsContent */}
+        </Tabs>
+
       </main>
 
       {/* ── Add / Edit Dialog ──────────────────────────────────────────────── */}
