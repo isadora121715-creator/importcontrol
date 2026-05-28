@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState } from "react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import {
@@ -14,13 +14,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -49,6 +42,7 @@ import {
   Loader2,
   X,
   RefreshCw,
+  Check,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -82,6 +76,9 @@ const MESES = [
   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
 ];
 
+const STATUS_MAT_OPTIONS = ["PENDENTE", "PAGO", "CANCELADO", "EXCLUÍDO"];
+const STATUS_DES_OPTIONS = ["PENDENTE", "AGUARDANDO", "PAGO", "CANCELADO"];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtBRL = (v: number | null | undefined) =>
   v != null
@@ -106,8 +103,6 @@ in30.setDate(in30.getDate() + 30);
 
 function parseDate(d: string | null | undefined): Date | null {
   if (!d) return null;
-  // Parse as local time to avoid UTC-offset shifting the day (e.g. UTC-3 turns
-  // "2024-01-15" midnight UTC into 2024-01-14 21:00 local → wrong date)
   const parts = d.split("-").map(Number);
   if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
     return new Date(parts[0], parts[1] - 1, parts[2]);
@@ -115,8 +110,8 @@ function parseDate(d: string | null | undefined): Date | null {
   const dt = new Date(d);
   return isNaN(dt.getTime()) ? null : dt;
 }
-const isOverdue  = (d: string | null | undefined) => { const dt = parseDate(d); return dt ? dt < today : false; };
-const isDueSoon  = (d: string | null | undefined) => { const dt = parseDate(d); return dt ? dt >= today && dt <= in30 : false; };
+const isOverdue = (d: string | null | undefined) => { const dt = parseDate(d); return dt ? dt < today : false; };
+const isDueSoon = (d: string | null | undefined) => { const dt = parseDate(d); return dt ? dt >= today && dt <= in30 : false; };
 
 function statusBadge(s: string | null) {
   const v = (s ?? "PENDENTE").toUpperCase();
@@ -133,6 +128,88 @@ function vencCell(d: string | null | undefined, status: string | null) {
   if (isOverdue(d))  return <span className="text-red-400    font-semibold">{fmtDate(d)}</span>;
   if (isDueSoon(d))  return <span className="text-yellow-400 font-semibold">{fmtDate(d)}</span>;
   return <span>{fmtDate(d)}</span>;
+}
+
+// ── Multi-select component ────────────────────────────────────────────────────
+function MultiSelect({
+  options,
+  value,
+  onChange,
+  placeholder,
+  className = "",
+  maxWidth = "w-[150px]",
+}: {
+  options: string[];
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder: string;
+  className?: string;
+  maxWidth?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const toggle = (opt: string) =>
+    onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt]);
+
+  const label =
+    value.length === 0 ? placeholder
+    : value.length === 1 ? value[0]
+    : `${value.length} selecionados`;
+
+  return (
+    <div ref={ref} className={`relative ${maxWidth} ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex h-9 w-full items-center justify-between gap-1 rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors hover:bg-accent/30 focus:outline-none focus:ring-1 focus:ring-ring ${
+          value.length > 0 ? "border-primary/60 text-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 opacity-50 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-[calc(100%+4px)] left-0 min-w-full w-max max-w-[260px] max-h-64 overflow-y-auto rounded-md border bg-popover shadow-md">
+          <div className="p-1">
+            {options.map((opt) => (
+              <div
+                key={opt}
+                onClick={() => toggle(opt)}
+                className="flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground select-none"
+              >
+                <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                  value.includes(opt)
+                    ? "bg-primary border-primary text-primary-foreground"
+                    : "border-input"
+                }`}>
+                  {value.includes(opt) && <Check className="h-3 w-3" />}
+                </div>
+                <span className="truncate">{opt}</span>
+              </div>
+            ))}
+          </div>
+          {value.length > 0 && (
+            <div
+              onClick={() => onChange([])}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-accent text-muted-foreground border-t"
+            >
+              <X className="h-3 w-3" /> Limpar seleção
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Data fetching — gist first, static fallback ───────────────────────────────
@@ -182,41 +259,42 @@ function SummaryCard({ icon, title, value, sub, color }: {
   );
 }
 
-// ── Date filters ──────────────────────────────────────────────────────────────
+// ── Date filters (multi-select) ───────────────────────────────────────────────
 function DateFilters({
-  years, filterYear, filterMonth, filterDay,
+  years,
+  filterYear, filterMonth, filterDay,
   onYear, onMonth, onDay,
 }: {
   years: string[];
-  filterYear: string; filterMonth: string; filterDay: string;
-  onYear: (v: string) => void; onMonth: (v: string) => void; onDay: (v: string) => void;
+  filterYear: string[]; filterMonth: string[]; filterDay: string[];
+  onYear: (v: string[]) => void; onMonth: (v: string[]) => void; onDay: (v: string[]) => void;
 }) {
+  const dayOptions = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
-      <Select value={filterYear} onValueChange={onYear}>
-        <SelectTrigger className="h-9 w-[110px] text-sm"><SelectValue placeholder="Ano" /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos anos</SelectItem>
-          {years.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <Select value={filterMonth} onValueChange={onMonth}>
-        <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue placeholder="Mês" /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos meses</SelectItem>
-          {MESES.map((m, i) => <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <Select value={filterDay} onValueChange={onDay}>
-        <SelectTrigger className="h-9 w-[100px] text-sm"><SelectValue placeholder="Dia" /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos dias</SelectItem>
-          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-            <SelectItem key={d} value={String(d)}>{String(d).padStart(2, "0")}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <MultiSelect
+        options={years}
+        value={filterYear}
+        onChange={onYear}
+        placeholder="Ano"
+        maxWidth="w-[110px]"
+      />
+      <MultiSelect
+        options={MESES.map((m, i) => `${String(i + 1).padStart(2, "0")} - ${m}`)}
+        value={filterMonth}
+        onChange={(v) => onMonth(v.map((s) => String(parseInt(s))))}
+        placeholder="Mês"
+        maxWidth="w-[130px]"
+      />
+      <MultiSelect
+        options={dayOptions}
+        value={filterDay.map((d) => d.padStart(2, "0"))}
+        onChange={(v) => onDay(v.map((s) => String(parseInt(s))))}
+        placeholder="Dia"
+        maxWidth="w-[100px]"
+      />
     </div>
   );
 }
@@ -291,7 +369,7 @@ function UploadPanel({
       const material    = parseMaterialSheet(matWb.Sheets[matWb.SheetNames[0]]);
       const desembaraco = parseDesembaracoSheet(desWb.Sheets[desWb.SheetNames[0]]);
 
-      setMsg(`Parseado: ${material.length} registros de material, ${desembaraco.length} de desembaraço. Sincronizando...`);
+      setMsg(`Parseado: ${material.length} material, ${desembaraco.length} desembaraço. Sincronizando...`);
       await syncToGists(material, desembaraco);
       onSuccess(material, desembaraco);
       toast.success(`Planilha atualizada via Google Sheets: ${material.length} material · ${desembaraco.length} desembaraço`);
@@ -308,7 +386,6 @@ function UploadPanel({
   return (
     <Card className="border-primary/30 bg-card shadow-md">
       <CardContent className="pt-4 pb-4">
-        {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <RefreshCw className="h-4 w-4 text-primary" />
@@ -323,14 +400,11 @@ function UploadPanel({
           </button>
         </div>
 
-        {/* Mode selector */}
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setMode("excel")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              mode === "excel"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
+              mode === "excel" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
             }`}
           >
             <Upload className="h-3.5 w-3.5" />
@@ -339,9 +413,7 @@ function UploadPanel({
           <button
             onClick={() => setMode("sheets")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              mode === "sheets"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
+              mode === "sheets" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
             }`}
           >
             <Link2 className="h-3.5 w-3.5" />
@@ -349,7 +421,6 @@ function UploadPanel({
           </button>
         </div>
 
-        {/* Excel mode */}
         {mode === "excel" && (
           <div className="space-y-3">
             <input
@@ -366,29 +437,15 @@ function UploadPanel({
             <div
               onClick={() => !uploading && fileRef.current?.click()}
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                uploading
-                  ? "border-border/30 cursor-not-allowed opacity-60"
-                  : "border-border/50 hover:border-primary/50 cursor-pointer"
+                uploading ? "border-border/30 cursor-not-allowed opacity-60" : "border-border/50 hover:border-primary/50 cursor-pointer"
               }`}
             >
-              {uploading ? (
-                <Loader2 className="h-8 w-8 mx-auto mb-2 text-muted-foreground animate-spin" />
-              ) : (
-                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              )}
-              <p className="text-sm font-medium">
-                {uploading ? "Processando..." : "Clique para selecionar o arquivo .xlsx"}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                O arquivo deve conter as abas MATERIAL e DESEMBARAÇO
-              </p>
+              {uploading ? <Loader2 className="h-8 w-8 mx-auto mb-2 text-muted-foreground animate-spin" /> : <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />}
+              <p className="text-sm font-medium">{uploading ? "Processando..." : "Clique para selecionar o arquivo .xlsx"}</p>
+              <p className="text-xs text-muted-foreground mt-1">O arquivo deve conter as abas MATERIAL e DESEMBARAÇO</p>
             </div>
             {!uploading && (
-              <Button
-                size="sm"
-                className="w-full"
-                onClick={() => fileRef.current?.click()}
-              >
+              <Button size="sm" className="w-full" onClick={() => fileRef.current?.click()}>
                 <Upload className="h-4 w-4 mr-2" />
                 Selecionar arquivo Excel
               </Button>
@@ -396,13 +453,11 @@ function UploadPanel({
           </div>
         )}
 
-        {/* Google Sheets mode */}
         {mode === "sheets" && (
           <div className="space-y-3">
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
-                Cole o link do Google Sheets (a planilha deve estar publicada publicamente via{" "}
-                <strong>Arquivo → Compartilhar → Publicar na web</strong>)
+                Cole o link do Google Sheets (a planilha deve estar publicada via <strong>Arquivo → Compartilhar → Publicar na web</strong>)
               </p>
               <div className="flex gap-2">
                 <Input
@@ -412,30 +467,19 @@ function UploadPanel({
                   disabled={uploading}
                   className="text-sm h-9"
                 />
-                <Button
-                  size="sm"
-                  className="shrink-0 h-9"
-                  disabled={uploading || !sheetsUrl.trim()}
-                  onClick={handleGoogleSheets}
-                >
+                <Button size="sm" className="shrink-0 h-9" disabled={uploading || !sheetsUrl.trim()} onClick={handleGoogleSheets}>
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Importar"}
                 </Button>
               </div>
             </div>
             <p className="text-xs text-muted-foreground bg-muted/40 rounded-md p-2.5">
-              ⚠️ A planilha precisa ter as abas com os nomes <code className="font-mono">MATERIAL</code> e{" "}
-              <code className="font-mono">DESEMBARACO</code> (sem acento) e estar acessível publicamente.
+              ⚠️ As abas devem se chamar <code className="font-mono">MATERIAL</code> e <code className="font-mono">DESEMBARACO</code> (sem acento) e estar acessíveis publicamente.
             </p>
           </div>
         )}
 
-        {/* Status message */}
         {msg && (
-          <p className={`mt-3 text-xs rounded-md px-3 py-2 ${
-            msg.startsWith("Erro")
-              ? "bg-red-500/10 text-red-400"
-              : "bg-muted/60 text-muted-foreground"
-          }`}>
+          <p className={`mt-3 text-xs rounded-md px-3 py-2 ${msg.startsWith("Erro") ? "bg-red-500/10 text-red-400" : "bg-muted/60 text-muted-foreground"}`}>
             {uploading && !msg.startsWith("Erro") && <Loader2 className="inline h-3 w-3 mr-1 animate-spin" />}
             {msg}
           </p>
@@ -447,40 +491,42 @@ function UploadPanel({
 
 // ── Material Tab ──────────────────────────────────────────────────────────────
 function MaterialTab({ rows }: { rows: MaterialRow[] }) {
-  const [search,       setSearch]       = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterCompany,setFilterCompany]= useState("all");
-  const [filterExp,    setFilterExp]    = useState("all");
-  const [filterYear,   setFilterYear]   = useState("all");
-  const [filterMonth,  setFilterMonth]  = useState("all");
-  const [filterDay,    setFilterDay]    = useState("all");
-  const [showAll,      setShowAll]      = useState(false);
-  const [page,         setPage]         = useState(1);
+  const [search,        setSearch]        = useState("");
+  const [filterStatus,  setFilterStatus]  = useState<string[]>([]);
+  const [filterCompany, setFilterCompany] = useState<string[]>([]);
+  const [filterExp,     setFilterExp]     = useState<string[]>([]);
+  const [filterYear,    setFilterYear]    = useState<string[]>([]);
+  const [filterMonth,   setFilterMonth]   = useState<string[]>([]);
+  const [filterDay,     setFilterDay]     = useState<string[]>([]);
+  const [showAll,       setShowAll]       = useState(false);
+  const [page,          setPage]          = useState(1);
 
   // Dropdown options always from full rows so they don't disappear while filtering
-  const companies = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.company).filter(Boolean))).sort() as string[]], [rows]);
-  const exporters = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.exporter).filter(Boolean))).sort() as string[]], [rows]);
-  const years     = useMemo(() => {
+  const companies = useMemo(() =>
+    Array.from(new Set(rows.map((r) => r.company).filter(Boolean))).sort() as string[], [rows]);
+  const exporters = useMemo(() =>
+    Array.from(new Set(rows.map((r) => r.exporter).filter(Boolean))).sort() as string[], [rows]);
+  const years = useMemo(() => {
     const s = new Set<string>();
     rows.forEach((r) => { const d = parseDate(r.vencAlterado ?? r.primeiroVencimento); if (d) s.add(String(d.getFullYear())); });
     return Array.from(s).sort().reverse();
   }, [rows]);
 
-  const reset = () => { setSearch(""); setFilterStatus("all"); setFilterCompany("all"); setFilterExp("all"); setFilterYear("all"); setFilterMonth("all"); setFilterDay("all"); setShowAll(false); setPage(1); };
-  const anyFilter = search || filterStatus !== "all" || filterCompany !== "all" || filterExp !== "all" || filterYear !== "all" || filterMonth !== "all" || filterDay !== "all";
+  const reset = () => { setSearch(""); setFilterStatus([]); setFilterCompany([]); setFilterExp([]); setFilterYear([]); setFilterMonth([]); setFilterDay([]); setShowAll(false); setPage(1); };
+  const anyFilter = !!(search || filterStatus.length || filterCompany.length || filterExp.length || filterYear.length || filterMonth.length || filterDay.length);
 
   // Filtered rows — computed first so cards derive from the same subset
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((r) => {
-      if (filterStatus  !== "all" && r.pgto     !== filterStatus)  return false;
-      if (filterCompany !== "all" && r.company  !== filterCompany) return false;
-      if (filterExp     !== "all" && r.exporter !== filterExp)     return false;
+      if (filterStatus.length  && !filterStatus.includes(r.pgto ?? ""))     return false;
+      if (filterCompany.length && !filterCompany.includes(r.company ?? "")) return false;
+      if (filterExp.length     && !filterExp.includes(r.exporter ?? ""))    return false;
       const vd = r.vencAlterado ?? r.primeiroVencimento;
-      const dt = filterYear !== "all" || filterMonth !== "all" || filterDay !== "all" ? parseDate(vd) : null;
-      if (filterYear  !== "all" && (!dt || String(dt.getFullYear()) !== filterYear))  return false;
-      if (filterMonth !== "all" && (!dt || String(dt.getMonth()+1) !== filterMonth))  return false;
-      if (filterDay   !== "all" && (!dt || String(dt.getDate())     !== filterDay))   return false;
+      const dt = (filterYear.length || filterMonth.length || filterDay.length) ? parseDate(vd) : null;
+      if (filterYear.length  && (!dt || !filterYear.includes(String(dt.getFullYear()))))  return false;
+      if (filterMonth.length && (!dt || !filterMonth.includes(String(dt.getMonth() + 1)))) return false;
+      if (filterDay.length   && (!dt || !filterDay.includes(String(dt.getDate()))))        return false;
       if (q && !`${r.po} ${r.exporter} ${r.cliente} ${r.pe} ${r.payment}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -498,7 +544,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
     ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : filtered.slice(0, INITIAL_ROWS);
 
-  const changeFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setShowAll(false); setPage(1); };
+  const cf = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setShowAll(false); setPage(1); };
 
   return (
     <div className="space-y-4">
@@ -510,30 +556,15 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
         <SummaryCard icon={<CheckCircle2  className="h-4 w-4 text-emerald-400"/>} title="Total registros"  value={filtered.length.toLocaleString("pt-BR")} sub={`${filtered.filter(r=>r.pgto==="PAGO").length} pagos`} color="text-emerald-400"/>
       </div>
 
-      {/* Filters row 1 */}
+      {/* Filters row 1 — search + status + company + exporter */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
-          <Input placeholder="Buscar PO, exportador, cliente..." value={search} onChange={(e) => changeFilter(setSearch)(e.target.value)} className="pl-8 h-9 text-sm"/>
+          <Input placeholder="Buscar PO, exportador, cliente..." value={search} onChange={(e) => cf(setSearch)(e.target.value)} className="pl-8 h-9 text-sm"/>
         </div>
-        <Select value={filterStatus} onValueChange={changeFilter(setFilterStatus)}>
-          <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Status"/></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos status</SelectItem>
-            <SelectItem value="PENDENTE">Pendente</SelectItem>
-            <SelectItem value="PAGO">Pago</SelectItem>
-            <SelectItem value="CANCELADO">Cancelado</SelectItem>
-            <SelectItem value="EXCLUÍDO">Excluído</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filterCompany} onValueChange={changeFilter(setFilterCompany)}>
-          <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue placeholder="Empresa"/></SelectTrigger>
-          <SelectContent>{companies.map((c) => <SelectItem key={c} value={c}>{c === "all" ? "Todas empresas" : c}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterExp} onValueChange={changeFilter(setFilterExp)}>
-          <SelectTrigger className="h-9 w-[160px] text-sm"><SelectValue placeholder="Exportador"/></SelectTrigger>
-          <SelectContent>{exporters.map((e) => <SelectItem key={e} value={e}>{e === "all" ? "Todos exportadores" : e}</SelectItem>)}</SelectContent>
-        </Select>
+        <MultiSelect options={STATUS_MAT_OPTIONS} value={filterStatus}  onChange={cf(setFilterStatus)}  placeholder="Status"      maxWidth="w-[145px]"/>
+        <MultiSelect options={companies}          value={filterCompany} onChange={cf(setFilterCompany)} placeholder="Empresa"     maxWidth="w-[130px]"/>
+        <MultiSelect options={exporters}          value={filterExp}     onChange={cf(setFilterExp)}     placeholder="Exportador"  maxWidth="w-[160px]"/>
         {anyFilter && <Button variant="ghost" size="sm" className="h-9" onClick={reset}>Limpar</Button>}
       </div>
 
@@ -541,7 +572,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
       <DateFilters
         years={years}
         filterYear={filterYear}   filterMonth={filterMonth}   filterDay={filterDay}
-        onYear={changeFilter(setFilterYear)} onMonth={changeFilter(setFilterMonth)} onDay={changeFilter(setFilterDay)}
+        onYear={cf(setFilterYear)} onMonth={cf(setFilterMonth)} onDay={cf(setFilterDay)}
       />
 
       <p className="text-xs text-muted-foreground">
@@ -591,10 +622,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
 
       {/* Expand / pagination */}
       {!showAll && filtered.length > INITIAL_ROWS && (
-        <button
-          onClick={() => setShowAll(true)}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md border border-dashed border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-        >
+        <button onClick={() => setShowAll(true)} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md border border-dashed border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors">
           <ChevronDown className="h-4 w-4"/>
           Ver todos os {filtered.length.toLocaleString("pt-BR")} registros
         </button>
@@ -610,10 +638,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
               </div>
             </div>
           )}
-          <button
-            onClick={() => { setShowAll(false); setPage(1); }}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-md border border-dashed border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-          >
+          <button onClick={() => { setShowAll(false); setPage(1); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-md border border-dashed border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors">
             <ChevronUp className="h-3.5 w-3.5"/>
             Recolher
           </button>
@@ -625,40 +650,42 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
 
 // ── Desembaraço Tab ───────────────────────────────────────────────────────────
 function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
-  const [search,       setSearch]       = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterEmpresa,setFilterEmpresa]= useState("all");
-  const [filterTipo,   setFilterTipo]   = useState("all");
-  const [filterYear,   setFilterYear]   = useState("all");
-  const [filterMonth,  setFilterMonth]  = useState("all");
-  const [filterDay,    setFilterDay]    = useState("all");
-  const [showAll,      setShowAll]      = useState(false);
-  const [page,         setPage]         = useState(1);
+  const [search,        setSearch]        = useState("");
+  const [filterStatus,  setFilterStatus]  = useState<string[]>([]);
+  const [filterEmpresa, setFilterEmpresa] = useState<string[]>([]);
+  const [filterTipo,    setFilterTipo]    = useState<string[]>([]);
+  const [filterYear,    setFilterYear]    = useState<string[]>([]);
+  const [filterMonth,   setFilterMonth]   = useState<string[]>([]);
+  const [filterDay,     setFilterDay]     = useState<string[]>([]);
+  const [showAll,       setShowAll]       = useState(false);
+  const [page,          setPage]          = useState(1);
 
-  // Dropdown options always from full rows so they don't disappear while filtering
-  const empresas = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.empresa).filter(Boolean))).sort() as string[]], [rows]);
-  const tipos    = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.tipo).filter(Boolean))).sort() as string[]], [rows]);
-  const years    = useMemo(() => {
+  // Dropdown options always from full rows
+  const empresas = useMemo(() =>
+    Array.from(new Set(rows.map((r) => r.empresa).filter(Boolean))).sort() as string[], [rows]);
+  const tipos = useMemo(() =>
+    Array.from(new Set(rows.map((r) => r.tipo).filter(Boolean))).sort() as string[], [rows]);
+  const years = useMemo(() => {
     const s = new Set<string>();
     rows.forEach((r) => { const d = parseDate(r.vencAlterado ?? r.vencimento); if (d) s.add(String(d.getFullYear())); });
     return Array.from(s).sort().reverse();
   }, [rows]);
 
-  const reset = () => { setSearch(""); setFilterStatus("all"); setFilterEmpresa("all"); setFilterTipo("all"); setFilterYear("all"); setFilterMonth("all"); setFilterDay("all"); setShowAll(false); setPage(1); };
-  const anyFilter = search || filterStatus !== "all" || filterEmpresa !== "all" || filterTipo !== "all" || filterYear !== "all" || filterMonth !== "all" || filterDay !== "all";
+  const reset = () => { setSearch(""); setFilterStatus([]); setFilterEmpresa([]); setFilterTipo([]); setFilterYear([]); setFilterMonth([]); setFilterDay([]); setShowAll(false); setPage(1); };
+  const anyFilter = !!(search || filterStatus.length || filterEmpresa.length || filterTipo.length || filterYear.length || filterMonth.length || filterDay.length);
 
   // Filtered rows — computed first so cards derive from the same subset
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((r) => {
-      if (filterStatus  !== "all" && r.pagto   !== filterStatus)  return false;
-      if (filterEmpresa !== "all" && r.empresa !== filterEmpresa) return false;
-      if (filterTipo    !== "all" && r.tipo    !== filterTipo)    return false;
+      if (filterStatus.length  && !filterStatus.includes(r.pagto ?? ""))    return false;
+      if (filterEmpresa.length && !filterEmpresa.includes(r.empresa ?? "")) return false;
+      if (filterTipo.length    && !filterTipo.includes(r.tipo ?? ""))       return false;
       const vd = r.vencAlterado ?? r.vencimento;
-      const dt = filterYear !== "all" || filterMonth !== "all" || filterDay !== "all" ? parseDate(vd) : null;
-      if (filterYear  !== "all" && (!dt || String(dt.getFullYear()) !== filterYear))  return false;
-      if (filterMonth !== "all" && (!dt || String(dt.getMonth()+1) !== filterMonth))  return false;
-      if (filterDay   !== "all" && (!dt || String(dt.getDate())     !== filterDay))   return false;
+      const dt = (filterYear.length || filterMonth.length || filterDay.length) ? parseDate(vd) : null;
+      if (filterYear.length  && (!dt || !filterYear.includes(String(dt.getFullYear()))))  return false;
+      if (filterMonth.length && (!dt || !filterMonth.includes(String(dt.getMonth() + 1)))) return false;
+      if (filterDay.length   && (!dt || !filterDay.includes(String(dt.getDate()))))        return false;
       if (q && !`${r.po} ${r.exportador} ${r.cliente} ${r.pe} ${r.modalidade}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -675,7 +702,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
     ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : filtered.slice(0, INITIAL_ROWS);
 
-  const changeFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setShowAll(false); setPage(1); };
+  const cf = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setShowAll(false); setPage(1); };
 
   return (
     <div className="space-y-4">
@@ -691,26 +718,11 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
-          <Input placeholder="Buscar PO, exportador, cliente..." value={search} onChange={(e) => changeFilter(setSearch)(e.target.value)} className="pl-8 h-9 text-sm"/>
+          <Input placeholder="Buscar PO, exportador, cliente..." value={search} onChange={(e) => cf(setSearch)(e.target.value)} className="pl-8 h-9 text-sm"/>
         </div>
-        <Select value={filterStatus} onValueChange={changeFilter(setFilterStatus)}>
-          <SelectTrigger className="h-9 w-[140px] text-sm"><SelectValue placeholder="Status"/></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos status</SelectItem>
-            <SelectItem value="PENDENTE">Pendente</SelectItem>
-            <SelectItem value="AGUARDANDO">Aguardando</SelectItem>
-            <SelectItem value="PAGO">Pago</SelectItem>
-            <SelectItem value="CANCELADO">Cancelado</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filterEmpresa} onValueChange={changeFilter(setFilterEmpresa)}>
-          <SelectTrigger className="h-9 w-[130px] text-sm"><SelectValue placeholder="Empresa"/></SelectTrigger>
-          <SelectContent>{empresas.map((e) => <SelectItem key={e} value={e}>{e === "all" ? "Todas empresas" : e}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterTipo} onValueChange={changeFilter(setFilterTipo)}>
-          <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="Tipo"/></SelectTrigger>
-          <SelectContent>{tipos.map((t) => <SelectItem key={t} value={t}>{t === "all" ? "Todos tipos" : t}</SelectItem>)}</SelectContent>
-        </Select>
+        <MultiSelect options={STATUS_DES_OPTIONS} value={filterStatus}  onChange={cf(setFilterStatus)}  placeholder="Status"  maxWidth="w-[145px]"/>
+        <MultiSelect options={empresas}           value={filterEmpresa} onChange={cf(setFilterEmpresa)} placeholder="Empresa" maxWidth="w-[130px]"/>
+        <MultiSelect options={tipos}              value={filterTipo}    onChange={cf(setFilterTipo)}    placeholder="Tipo"    maxWidth="w-[150px]"/>
         {anyFilter && <Button variant="ghost" size="sm" className="h-9" onClick={reset}>Limpar</Button>}
       </div>
 
@@ -718,7 +730,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
       <DateFilters
         years={years}
         filterYear={filterYear}   filterMonth={filterMonth}   filterDay={filterDay}
-        onYear={changeFilter(setFilterYear)} onMonth={changeFilter(setFilterMonth)} onDay={changeFilter(setFilterDay)}
+        onYear={cf(setFilterYear)} onMonth={cf(setFilterMonth)} onDay={cf(setFilterDay)}
       />
 
       <p className="text-xs text-muted-foreground">
@@ -768,10 +780,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
 
       {/* Expand / pagination */}
       {!showAll && filtered.length > INITIAL_ROWS && (
-        <button
-          onClick={() => setShowAll(true)}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md border border-dashed border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-        >
+        <button onClick={() => setShowAll(true)} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md border border-dashed border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors">
           <ChevronDown className="h-4 w-4"/>
           Ver todos os {filtered.length.toLocaleString("pt-BR")} registros
         </button>
@@ -787,10 +796,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
               </div>
             </div>
           )}
-          <button
-            onClick={() => { setShowAll(false); setPage(1); }}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-md border border-dashed border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-          >
+          <button onClick={() => { setShowAll(false); setPage(1); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-md border border-dashed border-border/60 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors">
             <ChevronUp className="h-3.5 w-3.5"/>
             Recolher
           </button>
@@ -802,9 +808,9 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Pagamentos() {
-  const qc     = useQueryClient();
-  const matQ   = useQuery({ queryKey: ["pagamentos-material"],    queryFn: fetchMaterial,    staleTime: 5*60_000, gcTime: 30*60_000, refetchOnMount: true, refetchOnWindowFocus: true });
-  const desQ   = useQuery({ queryKey: ["pagamentos-desembaraco"], queryFn: fetchDesembaraco, staleTime: 5*60_000, gcTime: 30*60_000, refetchOnMount: true, refetchOnWindowFocus: true });
+  const qc   = useQueryClient();
+  const matQ = useQuery({ queryKey: ["pagamentos-material"],    queryFn: fetchMaterial,    staleTime: 5*60_000, gcTime: 30*60_000, refetchOnMount: true, refetchOnWindowFocus: true });
+  const desQ = useQuery({ queryKey: ["pagamentos-desembaraco"], queryFn: fetchDesembaraco, staleTime: 5*60_000, gcTime: 30*60_000, refetchOnMount: true, refetchOnWindowFocus: true });
   const [showUpload, setShowUpload] = useState(false);
 
   const matRows = matQ.data ?? [];
@@ -842,10 +848,7 @@ export default function Pagamentos() {
 
         {/* Upload panel */}
         {showUpload && (
-          <UploadPanel
-            onClose={() => setShowUpload(false)}
-            onSuccess={handleUploadSuccess}
-          />
+          <UploadPanel onClose={() => setShowUpload(false)} onSuccess={handleUploadSuccess} />
         )}
 
         {/* Tabs */}
