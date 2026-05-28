@@ -106,6 +106,12 @@ in30.setDate(in30.getDate() + 30);
 
 function parseDate(d: string | null | undefined): Date | null {
   if (!d) return null;
+  // Parse as local time to avoid UTC-offset shifting the day (e.g. UTC-3 turns
+  // "2024-01-15" midnight UTC into 2024-01-14 21:00 local → wrong date)
+  const parts = d.split("-").map(Number);
+  if (parts.length >= 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
   const dt = new Date(d);
   return isNaN(dt.getTime()) ? null : dt;
 }
@@ -451,12 +457,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
   const [showAll,      setShowAll]      = useState(false);
   const [page,         setPage]         = useState(1);
 
-  const pendentes = useMemo(() => rows.filter((r) => r.pgto === "PENDENTE"), [rows]);
-  const vencidos  = useMemo(() => pendentes.filter((r) => isOverdue(r.vencAlterado ?? r.primeiroVencimento)), [pendentes]);
-  const aSoon     = useMemo(() => pendentes.filter((r) => isDueSoon(r.vencAlterado ?? r.primeiroVencimento)), [pendentes]);
-  const totalPend = useMemo(() => pendentes.reduce((s, r) => s + (r.reais ?? 0), 0), [pendentes]);
-  const totalVenc = useMemo(() => vencidos.reduce((s, r) => s + (r.reais ?? 0), 0), [vencidos]);
-
+  // Dropdown options always from full rows so they don't disappear while filtering
   const companies = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.company).filter(Boolean))).sort() as string[]], [rows]);
   const exporters = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.exporter).filter(Boolean))).sort() as string[]], [rows]);
   const years     = useMemo(() => {
@@ -468,6 +469,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
   const reset = () => { setSearch(""); setFilterStatus("all"); setFilterCompany("all"); setFilterExp("all"); setFilterYear("all"); setFilterMonth("all"); setFilterDay("all"); setShowAll(false); setPage(1); };
   const anyFilter = search || filterStatus !== "all" || filterCompany !== "all" || filterExp !== "all" || filterYear !== "all" || filterMonth !== "all" || filterDay !== "all";
 
+  // Filtered rows — computed first so cards derive from the same subset
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((r) => {
@@ -484,6 +486,13 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
     });
   }, [rows, search, filterStatus, filterCompany, filterExp, filterYear, filterMonth, filterDay]);
 
+  // Card totals — always reflect the currently filtered subset
+  const pendentes = useMemo(() => filtered.filter((r) => r.pgto === "PENDENTE"), [filtered]);
+  const vencidos  = useMemo(() => pendentes.filter((r) => isOverdue(r.vencAlterado ?? r.primeiroVencimento)), [pendentes]);
+  const aSoon     = useMemo(() => pendentes.filter((r) => isDueSoon(r.vencAlterado ?? r.primeiroVencimento)), [pendentes]);
+  const totalPend = useMemo(() => pendentes.reduce((s, r) => s + (r.reais ?? 0), 0), [pendentes]);
+  const totalVenc = useMemo(() => vencidos.reduce((s, r) => s + (r.reais ?? 0), 0), [vencidos]);
+
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const displayed  = showAll
     ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -498,7 +507,7 @@ function MaterialTab({ rows }: { rows: MaterialRow[] }) {
         <SummaryCard icon={<Clock         className="h-4 w-4 text-yellow-400"/>}  title="Pendentes"        value={fmtBRL(totalPend)} sub={`${pendentes.length} pagamentos`}  color="text-yellow-400"/>
         <SummaryCard icon={<AlertTriangle className="h-4 w-4 text-red-400"/>}     title="Vencidos"         value={fmtBRL(totalVenc)} sub={`${vencidos.length} pagamentos`}   color="text-red-400"/>
         <SummaryCard icon={<DollarSign    className="h-4 w-4 text-orange-400"/>}  title="Vence em 30 dias" value={fmtBRL(aSoon.reduce((s,r)=>s+(r.reais??0),0))} sub={`${aSoon.length} pagamentos`} color="text-orange-400"/>
-        <SummaryCard icon={<CheckCircle2  className="h-4 w-4 text-emerald-400"/>} title="Total registros"  value={rows.length.toLocaleString("pt-BR")} sub={`${rows.filter(r=>r.pgto==="PAGO").length} pagos`} color="text-emerald-400"/>
+        <SummaryCard icon={<CheckCircle2  className="h-4 w-4 text-emerald-400"/>} title="Total registros"  value={filtered.length.toLocaleString("pt-BR")} sub={`${filtered.filter(r=>r.pgto==="PAGO").length} pagos`} color="text-emerald-400"/>
       </div>
 
       {/* Filters row 1 */}
@@ -626,11 +635,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
   const [showAll,      setShowAll]      = useState(false);
   const [page,         setPage]         = useState(1);
 
-  const pendentes = useMemo(() => rows.filter((r) => r.pagto === "PENDENTE" || r.pagto === "AGUARDANDO"), [rows]);
-  const vencidos  = useMemo(() => pendentes.filter((r) => isOverdue(r.vencAlterado ?? r.vencimento)), [pendentes]);
-  const aSoon     = useMemo(() => pendentes.filter((r) => isDueSoon(r.vencAlterado ?? r.vencimento)), [pendentes]);
-  const totalPend = useMemo(() => pendentes.reduce((s, r) => s + (r.reais ?? 0), 0), [pendentes]);
-
+  // Dropdown options always from full rows so they don't disappear while filtering
   const empresas = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.empresa).filter(Boolean))).sort() as string[]], [rows]);
   const tipos    = useMemo(() => ["all", ...Array.from(new Set(rows.map((r) => r.tipo).filter(Boolean))).sort() as string[]], [rows]);
   const years    = useMemo(() => {
@@ -642,6 +647,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
   const reset = () => { setSearch(""); setFilterStatus("all"); setFilterEmpresa("all"); setFilterTipo("all"); setFilterYear("all"); setFilterMonth("all"); setFilterDay("all"); setShowAll(false); setPage(1); };
   const anyFilter = search || filterStatus !== "all" || filterEmpresa !== "all" || filterTipo !== "all" || filterYear !== "all" || filterMonth !== "all" || filterDay !== "all";
 
+  // Filtered rows — computed first so cards derive from the same subset
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((r) => {
@@ -658,6 +664,12 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
     });
   }, [rows, search, filterStatus, filterEmpresa, filterTipo, filterYear, filterMonth, filterDay]);
 
+  // Card totals — always reflect the currently filtered subset
+  const pendentes = useMemo(() => filtered.filter((r) => r.pagto === "PENDENTE" || r.pagto === "AGUARDANDO"), [filtered]);
+  const vencidos  = useMemo(() => pendentes.filter((r) => isOverdue(r.vencAlterado ?? r.vencimento)), [pendentes]);
+  const aSoon     = useMemo(() => pendentes.filter((r) => isDueSoon(r.vencAlterado ?? r.vencimento)), [pendentes]);
+  const totalPend = useMemo(() => pendentes.reduce((s, r) => s + (r.reais ?? 0), 0), [pendentes]);
+
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const displayed  = showAll
     ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -672,7 +684,7 @@ function DesembaracoTab({ rows }: { rows: DesembaracoRow[] }) {
         <SummaryCard icon={<Clock         className="h-4 w-4 text-yellow-400"/>}  title="Pendentes / Aguardando" value={fmtBRL(totalPend)} sub={`${pendentes.length} lançamentos`} color="text-yellow-400"/>
         <SummaryCard icon={<AlertTriangle className="h-4 w-4 text-red-400"/>}     title="Vencidos"               value={fmtBRL(vencidos.reduce((s,r)=>s+(r.reais??0),0))} sub={`${vencidos.length} lançamentos`} color="text-red-400"/>
         <SummaryCard icon={<DollarSign    className="h-4 w-4 text-orange-400"/>}  title="Vence em 30 dias"       value={fmtBRL(aSoon.reduce((s,r)=>s+(r.reais??0),0))} sub={`${aSoon.length} lançamentos`} color="text-orange-400"/>
-        <SummaryCard icon={<CheckCircle2  className="h-4 w-4 text-emerald-400"/>} title="Total registros"        value={rows.length.toLocaleString("pt-BR")} sub={`${rows.filter(r=>r.pagto==="PAGO").length} pagos`} color="text-emerald-400"/>
+        <SummaryCard icon={<CheckCircle2  className="h-4 w-4 text-emerald-400"/>} title="Total registros"        value={filtered.length.toLocaleString("pt-BR")} sub={`${filtered.filter(r=>r.pagto==="PAGO").length} pagos`} color="text-emerald-400"/>
       </div>
 
       {/* Filters row 1 */}
