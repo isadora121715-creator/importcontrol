@@ -5,7 +5,7 @@ import {
   TrendingDown, AlertTriangle, Lightbulb, CheckCircle2,
   XCircle, ArrowRight, RefreshCcw, Weight, Ruler,
 } from "lucide-react";
-import { analyzeFreight } from "@/server/ai.functions";
+import { analyzeFreight } from "@/lib/ai.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
