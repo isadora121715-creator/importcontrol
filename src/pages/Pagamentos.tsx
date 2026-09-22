@@ -10,6 +10,7 @@ import {
 } from "@/lib/parseExcelPagamentos";
 import { toast } from "sonner";
 import { HeaderTabs } from "@/components/HeaderTabs";
+import { FinanceTicker } from "@/components/FinanceTicker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -816,6 +817,25 @@ export default function Pagamentos() {
   const matRows = matQ.data ?? [];
   const desRows = desQ.data ?? [];
 
+  // Ticker estilo Bloomberg: total em aberto (R$) por fornecedor/exportador
+  const tickerItems = useMemo(() => {
+    const pend = new Map<string, number>();
+    const all  = new Map<string, number>();
+    const add = (map: Map<string, number>, key: string, v: number) => map.set(key, (map.get(key) ?? 0) + v);
+    matRows.forEach((r) => {
+      const key = (r.exporter ?? "").trim();
+      if (!key) return;
+      if (typeof r.reais === "number") {
+        add(all, key, r.reais);
+        if ((r.pgto ?? "").toUpperCase() === "PENDENTE") add(pend, key, r.reais);
+      }
+    });
+    const src = pend.size > 0 ? pend : all;
+    return Array.from(src.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, v]) => ({ name, value: fmtBRL(v) }));
+  }, [matRows]);
+
   function handleUploadSuccess(mat: MatRow[], des: DesRow[]) {
     qc.setQueryData(["pagamentos-material"],    mat);
     qc.setQueryData(["pagamentos-desembaraco"], des);
@@ -845,6 +865,9 @@ export default function Pagamentos() {
             {showUpload ? "Fechar" : "Atualizar Planilha"}
           </Button>
         </div>
+
+        {/* Ticker de fornecedores estilo Bloomberg */}
+        {tickerItems.length > 0 && <FinanceTicker label="Fornecedores" items={tickerItems} />}
 
         {/* Upload panel */}
         {showUpload && (

@@ -10,6 +10,7 @@ import { SupplierStatusTable } from "@/components/SupplierStatusTable";
 import { DelayAlertTable } from "@/components/DelayAlertTable";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { HeaderTabs } from "@/components/HeaderTabs";
+import { FinanceTicker } from "@/components/FinanceTicker";
 import { downloadDashboard } from "@/lib/downloadDashboard";
 import { downloadValvulasDashboard } from "@/lib/downloadValvulasDashboard";
 import { downloadTubosDashboard } from "@/lib/downloadTubosDashboard";
@@ -119,6 +120,23 @@ const Index = () => {
 
   const hasActiveFilter = statusFilter !== "all" || clienteFilter !== "all" || fornecedorFilter !== "all" || poFilter !== "all" || tipoFilter !== "all";
 
+  // Ticker estilo Bloomberg: valor total de compra por fornecedor
+  const tickerItems = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredData.forEach((d) => {
+      const key = (d.fornecedor ?? "").trim();
+      if (!key) return;
+      const v = (typeof d.precoCompra === "number" ? d.precoCompra : 0) * (typeof d.qtyCompra === "number" ? d.qtyCompra : 1);
+      if (v > 0) map.set(key, (map.get(key) ?? 0) + v);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, v]) => ({
+        name,
+        value: `US$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      }));
+  }, [filteredData]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -145,6 +163,9 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <HeaderTabs />
       <main className="mx-auto max-w-[1600px] p-6 space-y-8">
+        {/* Ticker de fornecedores estilo Bloomberg */}
+        {tickerItems.length > 0 && <FinanceTicker label={activeCategory} items={tickerItems} />}
+
         {/* View Tabs */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
