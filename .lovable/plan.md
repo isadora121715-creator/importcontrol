@@ -1,4 +1,4 @@
-# Recriar o projeto ImportBuilder
+  # Recriar o projeto ImportBuilder
 
 Recriação completa do app **ImportBuilder** — um dashboard de gestão de importações (compras, vendas, embarques, fornecedores, materiais como tubos e válvulas) com upload de planilhas Excel, autenticação e visualizações analíticas.
 
@@ -70,7 +70,7 @@ src/routes/
   _app.tsx                layout autenticado (sidebar + header)
   _app.geral.tsx
   _app.compras.tsx
-  _app.vendas.tsx
+  _app.vendas.tsx        
   _app.embarques.tsx
   _app.tubos.tsx
   _app.valvulas.tsx
@@ -83,3 +83,4 @@ src/routes/
 - O projeto é grande (~80 arquivos de código). Vou recriar tudo numa única passada após aprovação, mas alguns refinamentos visuais podem precisar de ajustes posteriores
 - Os arquivos binários (logos, ícones, favicon) do zip original não foram extraídos — usarei placeholders ou logos genéricos. Se quiser os exatos, faça reupload das imagens separadamente como PNG/JPG após a recriação
 - O `.env` original com chaves Supabase do projeto antigo será ignorado — o Lovable Cloud provisionará um novo backend automaticamente
+Commit directly to the main branch
