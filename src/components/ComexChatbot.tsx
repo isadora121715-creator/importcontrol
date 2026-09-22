@@ -4,7 +4,7 @@ import {
   MessageCircle, X, Send, Loader2, Bot, Database,
   ChevronDown, Trash2, Sparkles,
 } from "lucide-react";
-import { chatComex } from "@/server/ai.functions";
+import { chatComex } from "@/lib/ai.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
