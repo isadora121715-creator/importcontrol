@@ -10,6 +10,7 @@ import { SupplierStatusTable } from "@/components/SupplierStatusTable";
 import { DelayAlertTable } from "@/components/DelayAlertTable";
 import { FilterSidebar } from "@/components/FilterSidebar";
 import { HeaderTabs } from "@/components/HeaderTabs";
+import { FinanceTicker } from "@/components/FinanceTicker";
 import { downloadDashboard } from "@/lib/downloadDashboard";
 import { downloadValvulasDashboard } from "@/lib/downloadValvulasDashboard";
 import { downloadTubosDashboard } from "@/lib/downloadTubosDashboard";

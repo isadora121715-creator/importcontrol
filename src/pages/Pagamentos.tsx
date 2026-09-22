@@ -10,6 +10,7 @@ import {
 } from "@/lib/parseExcelPagamentos";
 import { toast } from "sonner";
 import { HeaderTabs } from "@/components/HeaderTabs";
+import { FinanceTicker } from "@/components/FinanceTicker";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
