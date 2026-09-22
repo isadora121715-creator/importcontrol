@@ -163,6 +163,9 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <HeaderTabs />
       <main className="mx-auto max-w-[1600px] p-6 space-y-8">
+        {/* Ticker de fornecedores estilo Bloomberg */}
+        {tickerItems.length > 0 && <FinanceTicker label={activeCategory} items={tickerItems} />}
+
         {/* View Tabs */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">

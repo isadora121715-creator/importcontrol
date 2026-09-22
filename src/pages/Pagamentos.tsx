@@ -866,6 +866,9 @@ export default function Pagamentos() {
           </Button>
         </div>
 
+        {/* Ticker de fornecedores estilo Bloomberg */}
+        {tickerItems.length > 0 && <FinanceTicker label="Fornecedores" items={tickerItems} />}
+
         {/* Upload panel */}
         {showUpload && (
           <UploadPanel onClose={() => setShowUpload(false)} onSuccess={handleUploadSuccess} />
