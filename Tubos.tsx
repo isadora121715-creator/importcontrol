@@ -1,0 +1,328 @@
+import { useDeferredValue, useMemo, useRef, useState, useEffect } from "react";
+import { usePageState } from "@/hooks/usePageState";
+import { Package, Upload, FileSpreadsheet, Loader2, Download, Clock, BarChart2, Eye, ArrowLeft, FileDown } from "lucide-react";
+import { usePedidos } from "@/hooks/usePedidos";
+import { SupplierTicker, type TickerItem } from "@/components/SupplierTicker";
+import { DashboardCards } from "@/components/DashboardCards";
+import { SupplierStatusTable } from "@/components/SupplierStatusTable";
+import { DelayAlertTable } from "@/components/DelayAlertTable";
+import { FilterSidebar } from "@/components/FilterSidebar";
+import { HeaderTabs } from "@/components/HeaderTabs";
+import { downloadTubosDashboard } from "@/lib/downloadTubosDashboard";
+import { downloadPedidosXLSX, downloadPedidosPDF } from "@/lib/downloadPedidosReport";
+import { toast } from "sonner";
+import { DashboardErrorState, DashboardLoadingSkeleton } from "@/components/dashboard/DashboardStates";
+import { DashboardChartsSection, DashboardInsightsSection } from "@/components/dashboard/LazyDashboardSections";
+import { MonthlyAnalysis } from "@/components/MonthlyAnalysis";
+
+const TUBOS_STATUS_OPTIONS = ["No prazo", "Atrasado", "Crítico", "Chegou", "Estoque", "Verificar aéreo", "Alerta"];
+
+const Tubos = () => {
+  const activeCategory = "Tubos";
+
+  const {
+    data,
+    loading,
+    fileName,
+    handleFileUpload,
+    lastUpdated,
+    isRefreshing,
+    isUpdating,
+    updateProgress,
+    updateMessage,
+    errorMessage,
+    retry,
+  } = usePedidos(activeCategory);
+
+
+  const [activeTab, setActiveTab] = usePageState<"overview" | "monthly">("tubos.activeTab", "overview");
+  const [statusFilter, setStatusFilter] = usePageState<string>("tubos.statusFilter", "all");
+  const [clienteFilter, setClienteFilter] = usePageState<string>("tubos.clienteFilter", "all");
+  const [fornecedorFilter, setFornecedorFilter] = usePageState<string>("tubos.fornecedorFilter", "all");
+  const [poFilter, setPoFilter] = usePageState<string>("tubos.poFilter", "all");
+  const [tipoFilter, setTipoFilter] = usePageState<string>("tubos.tipoFilter", "all");
+
+  const delayRef = useRef<HTMLDivElement>(null);
+  const deferredData = useDeferredValue(data);
+
+  const clientes = useMemo(() => {
+    const set = new Set<string>();
+    deferredData.forEach((d) => { if (d.cliente) set.add(d.cliente); });
+    return Array.from(set).sort();
+  }, [deferredData]);
+
+  const fornecedores = useMemo(() => {
+    const set = new Set<string>();
+    deferredData.forEach((d) => { if (d.fornecedor) set.add(d.fornecedor); });
+    return Array.from(set).sort();
+  }, [deferredData]);
+
+  const poList = useMemo(() => {
+    const set = new Set<string>();
+    deferredData.forEach((d) => { if (d.po) set.add(d.po); });
+    return Array.from(set).sort();
+  }, [deferredData]);
+
+  const tickerItems: TickerItem[] = useMemo(() => {
+    return deferredData
+      .filter((d) => d.fornecedor && ((d.precoVenda ?? d.precoCompra ?? 0) > 0))
+      .sort((a, b) => (a.diasFaltam ?? 999) - (b.diasFaltam ?? 999))
+      .slice(0, 30)
+      .map((d, i) => {
+        const s = (d.statusFornecedor ?? "").toLowerCase();
+        return {
+          key: `${d.po}-${d.item}-${i}`,
+          name: d.fornecedor as string,
+          value: (d.precoVenda ?? d.precoCompra ?? 0) as number,
+          meta: d.po ?? undefined,
+          tone: (s.includes("atras") || s.includes("crít") || s.includes("critic")) ? "urgent" : "normal",
+        } as TickerItem;
+      });
+  }, [deferredData]);
+
+  const tiposMaterial = useMemo(() => {
+    const set = new Set<string>();
+    deferredData.forEach((d) => {
+      if (d.descricao) {
+        const match = d.descricao.match(/^[0-9"'/-\s]*([A-ZÇÃÕÁÉÍÓÚÂÊÔ]+)/i);
+        if (match && match[1]) {
+          set.add(match[1].toUpperCase());
+        }
+      }
+    });
+    return Array.from(set).sort();
+  }, [deferredData]);
+
+  const statusOptions = useMemo(() => {
+    if (activeCategory === "Tubos") return TUBOS_STATUS_OPTIONS;
+    const set = new Set<string>();
+    deferredData.forEach((d) => { if (d.statusCompraVenda) set.add(d.statusCompraVenda); });
+    return Array.from(set).sort();
+  }, [deferredData, activeCategory]);
+
+  const filteredData = useMemo(() => {
+    return deferredData.filter((d) => {
+      if (statusFilter !== "all" && d.statusCompraVenda !== statusFilter) return false;
+      if (clienteFilter !== "all" && d.cliente !== clienteFilter) return false;
+      if (fornecedorFilter !== "all" && d.fornecedor !== fornecedorFilter) return false;
+      if (poFilter !== "all" && d.po !== poFilter) return false;
+      if (tipoFilter !== "all") {
+        if (!d.descricao) return false;
+        const match = d.descricao.match(/^[0-9"'/-\s]*([A-ZÇÃÕÁÉÍÓÚÂÊÔ]+)/i);
+        if (!match || match[1].toUpperCase() !== tipoFilter) return false;
+      }
+      return true;
+    });
+  }, [deferredData, statusFilter, clienteFilter, fornecedorFilter, poFilter, tipoFilter]);
+
+  const handleStatusClick = (status: string) => {
+    setStatusFilter(status);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handlePoClick = (po: string) => {
+    setPoFilter(po);
+  };
+
+  const hasActiveFilter = statusFilter !== "all" || clienteFilter !== "all" || fornecedorFilter !== "all" || poFilter !== "all" || tipoFilter !== "all";
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <HeaderTabs />
+        <main className="mx-auto max-w-[1600px] p-6">
+          <DashboardLoadingSkeleton />
+        </main>
+      </div>
+    );
+  }
+
+  if (errorMessage && filteredData.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <HeaderTabs />
+        <main className="mx-auto max-w-[1600px] p-6">
+          <DashboardErrorState message={errorMessage} onRetry={() => void retry()} />
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <HeaderTabs />
+      <main className="mx-auto max-w-[1600px] p-6 space-y-8">
+        <SupplierTicker items={tickerItems} label="FORNECEDORES — TUBOS" />
+        {/* View Tabs */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all ${
+                activeTab === "overview"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Eye className="h-4 w-4" />
+              Visão Geral
+            </button>
+            <button
+              onClick={() => setActiveTab("monthly")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all ${
+                activeTab === "monthly"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BarChart2 className="h-4 w-4" />
+              Análise Mensal
+            </button>
+          </div>
+          <a
+            href="https://controle-pedidoscon.lovable.app/dashboard"
+            className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-bold text-primary shadow-sm transition-all hover:bg-primary/20 hover:-translate-y-0.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar ao Início
+          </a>
+        </div>
+
+        {activeTab === "overview" ? (
+          <div>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              Dashboard
+            </h2>
+            <div className="flex flex-col lg:flex-row gap-4">
+              <FilterSidebar
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                clienteFilter={clienteFilter}
+                setClienteFilter={setClienteFilter}
+                fornecedorFilter={fornecedorFilter}
+                setFornecedorFilter={setFornecedorFilter}
+                poFilter={poFilter}
+                setPoFilter={setPoFilter}
+                tipoFilter={tipoFilter}
+                setTipoFilter={setTipoFilter}
+                statusOptions={statusOptions}
+                clientes={clientes}
+                fornecedores={fornecedores}
+                poList={poList}
+                tiposMaterial={tiposMaterial}
+                hasActiveFilter={hasActiveFilter}
+              />
+
+              <div className="flex-1 min-w-0 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground flex-1 min-w-0">
+                    {fileName && (
+                      <span className="flex items-center gap-1">
+                        <FileSpreadsheet className="h-3 w-3" />
+                        {fileName}
+                      </span>
+                    )}
+                    {lastUpdated && (
+                      <span className="flex items-center gap-1 text-xs">
+                        <Clock className="h-3 w-3" />
+                        Atualizado: {new Date(lastUpdated).toLocaleDateString("pt-BR")} às {new Date(lastUpdated).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    )}
+                    {isRefreshing && !isUpdating && (
+                      <span className="flex items-center gap-1 text-xs">
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                        Sincronizando em background...
+                      </span>
+                    )}
+                    {updateMessage && (
+                      <span className="flex items-center gap-1 text-xs">
+                        <Loader2 className={`h-3 w-3 ${isUpdating ? "animate-spin text-primary" : "text-primary"}`} />
+                        {updateMessage}{isUpdating ? ` ${updateProgress}%` : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const ok = downloadTubosDashboard(filteredData as any, activeCategory);
+                        if (!ok) toast.info("Nenhum dado para exportar.");
+                      }}
+                      disabled={isUpdating}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Baixar Excel
+                    </button>
+                    <button
+                      onClick={() => { if (!downloadPedidosXLSX(filteredData as any, activeCategory)) toast.info("Nenhum dado para exportar."); }}
+                      disabled={isUpdating || filteredData.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      Exportar Excel
+                    </button>
+                    <button
+                      onClick={() => { if (!downloadPedidosPDF(filteredData as any, activeCategory)) toast.info("Nenhum dado para exportar."); }}
+                      disabled={isUpdating || filteredData.length === 0}
+                      className="flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Exportar PDF
+                    </button>
+                    <label className={`flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 ${isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+                      <Upload className="h-3.5 w-3.5" />
+                      {isUpdating ? "Atualizando..." : `Atualizar Planilha ${activeCategory}`}
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        disabled={isUpdating}
+                      />
+                    </label>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold">{filteredData.length}</p>
+                      <p className="text-xs text-muted-foreground">registros</p>
+                    </div>
+                  </div>
+                </div>
+
+                <DashboardCards data={filteredData as any} categoria={activeCategory} />
+
+                <div ref={delayRef}>
+                  <DelayAlertTable
+                    data={filteredData as any}
+                    onPoClick={handlePoClick}
+                    activePo={poFilter}
+                    categoria={activeCategory}
+                    isRefreshing={isUpdating}
+                    statusMessage={updateMessage}
+                  />
+                </div>
+
+                <DashboardChartsSection data={filteredData as any} onStatusClick={handleStatusClick} activeStatus={statusFilter} />
+
+                <SupplierStatusTable
+                  data={filteredData as any}
+                  onPoClick={handlePoClick}
+                  activePo={poFilter}
+                  categoria={activeCategory}
+                  isRefreshing={isUpdating}
+                  statusMessage={updateMessage}
+                />
+                <DashboardInsightsSection data={filteredData as any} activePo={poFilter} onPoSelect={(po) => setPoFilter(po)} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <MonthlyAnalysis data={filteredData as any} />
+        )}
+      </main>
+    </div>
+  );
+};
+
+
+
+export default Tubos;
